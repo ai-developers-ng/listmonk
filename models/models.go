@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/types"
@@ -62,6 +63,10 @@ const (
 
 	// ContentTpl is the name of the compiled message.
 	ContentTpl = "content"
+
+	// Headers attached to e-mails for bounce tracking.
+	EmailHeaderSubscriberUUID = "X-Listmonk-Subscriber"
+	EmailHeaderCampaignUUID   = "X-Listmonk-Campaign"
 )
 
 // regTplFunc represents contains a regular expression for wrapping and
@@ -224,6 +229,19 @@ type Template struct {
 	Name      string `db:"name" json:"name"`
 	Body      string `db:"body" json:"body,omitempty"`
 	IsDefault bool   `db:"is_default" json:"is_default"`
+}
+
+// Bounce represents a single bounce event.
+type Bounce struct {
+	Type         string          `json:"type"`
+	CampaignUUID string          `json:"campaign_uuid"`
+	Source       string          `json:"source"`
+	Meta         json.RawMessage `json:"meta"`
+	CreatedAt    time.Time       `json:"created_at"`
+
+	// One of these should be provided.
+	Email          string `json:"email"`
+	SubscriberUUID string `json:"subscriber_uuid"`
 }
 
 // markdown is a global instance of Markdown parser and renderer.
