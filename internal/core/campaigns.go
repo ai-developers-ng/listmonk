@@ -181,6 +181,7 @@ func (c *Core) CreateCampaign(o models.Campaign, listIDs []int, mediaIDs []int) 
 		o.ContentType,
 		o.SendAt,
 		o.Headers,
+		o.Attribs,
 		pq.StringArray(normalizeTags(o.Tags)),
 		o.Messenger,
 		o.TemplateID,
@@ -220,6 +221,7 @@ func (c *Core) UpdateCampaign(id int, o models.Campaign, listIDs []int, mediaIDs
 		o.ContentType,
 		o.SendAt,
 		o.Headers,
+		o.Attribs,
 		pq.StringArray(normalizeTags(o.Tags)),
 		o.Messenger,
 		o.TemplateID,
@@ -330,6 +332,25 @@ func (c *Core) DeleteCampaign(id int) error {
 	return nil
 }
 
+// DeleteCampaigns deletes multiple campaigns by IDs or by query.
+func (c *Core) DeleteCampaigns(ids []int, query string, hasAllPerm bool, permittedLists []int) error {
+	var queryStr string
+
+	if len(ids) > 0 {
+		queryStr = ""
+	} else {
+		queryStr = makeSearchString(query)
+	}
+
+	if _, err := c.q.DeleteCampaigns.Exec(pq.Array(ids), queryStr, hasAllPerm, pq.Array(permittedLists)); err != nil {
+		c.log.Printf("error deleting campaigns: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaigns}", "error", pqErrMsg(err)))
+	}
+
+	return nil
+}
+
 // CampaignHasLists checks if a campaign has any of the given list IDs.
 func (c *Core) CampaignHasLists(id int, listIDs []int) (bool, error) {
 	has := false
@@ -414,6 +435,16 @@ func (c *Core) RegisterCampaignView(campUUID, subUUID string) error {
 	return nil
 }
 
+// GetLinkURL returns the original URL for a link UUID without recording a click.
+func (c *Core) GetLinkURL(linkUUID string) (string, error) {
+	var url string
+	if err := c.q.GetLinkURL.Get(&url, linkUUID); err != nil {
+		c.log.Printf("error getting link URL: %s", err)
+		return "", echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
+	}
+	return url, nil
+}
+
 // RegisterCampaignLinkClick registers a subscriber's link click on a campaign.
 func (c *Core) RegisterCampaignLinkClick(linkUUID, campUUID, subUUID string) (string, error) {
 	var url string
@@ -427,6 +458,36 @@ func (c *Core) RegisterCampaignLinkClick(linkUUID, campUUID, subUUID string) (st
 	}
 
 	return url, nil
+}
+
+// ExportCampaignViews returns an iterator with campaign views for streaming/exporting.
+func (c *Core) ExportCampaignViews(since time.Time, batchSize int) func() ([]models.CampaignViewExport, error) {
+	offset := 0
+	return func() ([]models.CampaignViewExport, error) {
+		var out []models.CampaignViewExport
+		if err := c.q.ExportCampaignViews.Select(&out, since, batchSize, offset); err != nil {
+			c.log.Printf("error exporting campaign views: %v", err)
+			return nil, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+		}
+		offset += len(out)
+		return out, nil
+	}
+}
+
+// ExportCampaignLinkClicks returns an iterator with campaign link click for streaming/exporting.
+func (c *Core) ExportCampaignLinkClicks(since time.Time, batchSize int) func() ([]models.CampaignClickExport, error) {
+	offset := 0
+	return func() ([]models.CampaignClickExport, error) {
+		var out []models.CampaignClickExport
+		if err := c.q.ExportCampaignLinkClicks.Select(&out, since, batchSize, offset); err != nil {
+			c.log.Printf("error exporting campaign link clicks: %v", err)
+			return nil, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+		}
+		offset += len(out)
+		return out, nil
+	}
 }
 
 // DeleteCampaignViews deletes campaign views older than a given date.

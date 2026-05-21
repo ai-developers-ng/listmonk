@@ -153,6 +153,11 @@ export const deleteList = (id) => http.delete(
   { loading: models.lists },
 );
 
+export const deleteLists = (params) => http.delete(
+  '/api/lists',
+  { params, loading: models.lists },
+);
+
 // Subscribers.
 export const getSubscribers = async (params) => http.get(
   '/api/subscribers',
@@ -166,6 +171,11 @@ export const getSubscribers = async (params) => http.get(
 
 export const getSubscriber = async (id) => http.get(
   `/api/subscribers/${id}`,
+  { loading: models.subscribers },
+);
+
+export const getSubscriberActivity = async (id) => http.get(
+  `/api/subscribers/${id}/activity`,
   { loading: models.subscribers },
 );
 
@@ -348,6 +358,11 @@ export const deleteCampaign = async (id) => http.delete(
   { loading: models.campaigns },
 );
 
+export const deleteCampaigns = (params) => http.delete(
+  '/api/campaigns',
+  { params, loading: models.campaigns },
+);
+
 // Media.
 export const getMedia = async (params) => http.get(
   '/api/media',
@@ -412,6 +427,12 @@ export const getSettings = async () => http.get(
 
 export const updateSettings = async (data) => http.put(
   '/api/settings',
+  data,
+  { loading: models.settings },
+);
+
+export const updateSettingsByKey = async (key, data) => http.put(
+  `/api/settings/${key}`,
   data,
   { loading: models.settings },
 );
@@ -536,4 +557,20 @@ export const updateListRole = (data) => http.put(
 export const deleteRole = (id) => http.delete(
   `/api/roles/${id}`,
   { loading: models.userRoles },
+);
+
+// TOTP 2FA APIs
+export const getTOTPQR = (id) => http.get(
+  `/api/users/${id}/twofa/totp`,
+  { camelCase: true },
+);
+
+export const enableTOTP = (id, data) => http.put(
+  `/api/users/${id}/twofa`,
+  data,
+);
+
+export const disableTOTP = (id, data) => http.delete(
+  `/api/users/${id}/twofa`,
+  { data },
 );

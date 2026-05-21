@@ -257,14 +257,19 @@ func (a *App) CreateCampaign(c echo.Context) error {
 		return err
 	}
 
+	// Filter lists against the current user's permitted lists.
+	user := auth.GetUser(c)
+	o.ListIDs = user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, o.ListIDs)
+
 	// If the campaign's 'opt-in', prepare a default message.
-	if o.Type == models.CampaignTypeOptin {
+	switch o.Type {
+	case models.CampaignTypeOptin:
 		op, err := a.makeOptinCampaignMessage(o)
 		if err != nil {
 			return err
 		}
 		o = op
-	} else if o.Type == "" {
+	case "":
 		o.Type = models.CampaignTypeRegular
 	}
 
@@ -312,6 +317,11 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("campaigns.cantUpdate"))
 	}
 
+	// Clear attribs to avoid merging old and new values as json.Unmarshal in JSON.scan() merges maps,
+	// merging values already in the DB and incoming values. If this is nil, then DB values remain
+	// unchanged.
+	cm.Attribs = nil
+
 	// Read the incoming params into the existing campaign fields from the DB.
 	// This allows updating of values that have been sent whereas fields
 	// that are not in the request retain the old values.
@@ -319,6 +329,10 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 	if err := c.Bind(&o); err != nil {
 		return err
 	}
+
+	// Filter lists against the current user's permitted lists.
+	user := auth.GetUser(c)
+	o.ListIDs = user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, o.ListIDs)
 
 	if c, err := a.validateCampaignFields(o); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -418,6 +432,56 @@ func (a *App) DeleteCampaign(c echo.Context) error {
 	return c.JSON(http.StatusOK, okResp{true})
 }
 
+// DeleteCampaigns deletes multiple campaigns by IDs or by query.
+func (a *App) DeleteCampaigns(c echo.Context) error {
+	// Get the authenticated user.
+	user := auth.GetUser(c)
+
+	var (
+		hasAllPerm     = user.HasPerm(auth.PermCampaignsManageAll)
+		permittedLists []int
+	)
+
+	if !hasAllPerm {
+		// Either the user has campaigns:manage_all permissions and can manage all campaigns,
+		// or the campaigns are filtered by the lists the user has get|manage access to.
+		hasAllPerm, permittedLists = user.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage)
+	}
+
+	var (
+		ids   []int
+		query string
+		all   bool
+	)
+
+	// Check for IDs in query params.
+	if len(c.Request().URL.Query()["id"]) > 0 {
+		var err error
+		ids, err = parseStringIDs(c.Request().URL.Query()["id"])
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		}
+	} else {
+		// Check for query param.
+		query = strings.TrimSpace(c.FormValue("query"))
+		all = c.FormValue("all") == "true"
+	}
+
+	// Validate that either IDs or query is provided.
+	if len(ids) == 0 && (query == "" && !all) {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "id or query required"))
+	}
+
+	// Delete the campaigns from the DB.
+	if err := a.core.DeleteCampaigns(ids, query, hasAllPerm, permittedLists); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, okResp{true})
+}
+
 // GetRunningCampaignStats returns stats of a given set of campaign IDs.
 func (a *App) GetRunningCampaignStats(c echo.Context) error {
 	// Get the running campaign stats from the DB.
@@ -486,6 +550,16 @@ func (a *App) TestCampaign(c echo.Context) error {
 	// Get the subscribers from the DB by their e-mails.
 	subs, err := a.core.GetSubscribersByEmail(req.SubscriberEmails)
 	if err != nil {
+		return err
+	}
+
+	// Check if the user has permission to access the subscribers.
+	user := auth.GetUser(c)
+	subIDs := make([]int, len(subs))
+	for i, s := range subs {
+		subIDs[i] = s.ID
+	}
+	if err := a.hasSubPerm(user, subIDs); err != nil {
 		return err
 	}
 
@@ -629,7 +703,12 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 	}
 
 	if !a.manager.HasMessenger(c.Messenger) {
-		return c, errors.New(a.i18n.Ts("campaigns.fieldInvalidMessenger", "name", c.Messenger))
+		// If it's a specific SMTP, but it's no longer available (removed/disabled), fall back to general email messenger.
+		if strings.HasPrefix(c.Messenger, "email-") {
+			c.Messenger = "email"
+		} else {
+			return c, errors.New(a.i18n.Ts("campaigns.fieldInvalidMessenger", "name", c.Messenger))
+		}
 	}
 
 	camp := models.Campaign{Body: c.Body, TemplateBody: tplTag}
@@ -639,6 +718,13 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 
 	if len(c.Headers) == 0 {
 		c.Headers = make([]map[string]string, 0)
+	}
+
+	// Validate and initialize attribs.
+	if c.Attribs != nil {
+		if _, err := json.Marshal(c.Attribs); err != nil {
+			return c, errors.New(a.i18n.T("subscribers.invalidJSON"))
+		}
 	}
 
 	if len(c.ArchiveMeta) == 0 {
@@ -702,6 +788,8 @@ func (a *App) makeOptinCampaignMessage(o campReq) (campReq, error) {
 }
 
 // checkCampaignPerm checks if the user has get or manage access to the given campaign.
+// Either the user has blanket get_all/manage_all permissions, or the campaign
+// belongs to lists that the user has access to.
 func (a *App) checkCampaignPerm(types auth.PermType, id int, c echo.Context) error {
 	// Get the authenticated user.
 	user := auth.GetUser(c)

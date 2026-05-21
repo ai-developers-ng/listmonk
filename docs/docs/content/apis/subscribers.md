@@ -11,6 +11,7 @@
 | POST   | [/api/public/subscription](#post-apipublicsubscription)                                 | Create a public subscription.                  |
 | PUT    | [/api/subscribers/lists](#put-apisubscriberslists)                                      | Modify subscriber list memberships.            |
 | PUT    | [/api/subscribers/{subscriber_id}](#put-apisubscriberssubscriber_id)                    | Update a specific subscriber.                  |
+| PATCH  | [/api/subscribers/{subscriber_id}](#patch-apisubscriberssubscriber_id)                  | Partially update a specific subscriber.        |
 | PUT    | [/api/subscribers/{subscriber_id}/blocklist](#put-apisubscriberssubscriber_idblocklist) | Blocklist a specific subscriber.               |
 | PUT    | [/api/subscribers/blocklist](#put-apisubscribersblocklist)                              | Blocklist one or many subscribers.             |
 | PUT    | [/api/subscribers/query/blocklist](#put-apisubscribersqueryblocklist)                   | Blocklist subscribers based on SQL expression. |
@@ -28,7 +29,7 @@ Retrieve all subscribers.
 ##### Query parameters
 
 | Name                | Type   | Required | Description                                                           |
-|:--------------------|:-------|:---------|:----------------------------------------------------------------------|
+| :------------------ | :----- | :------- | :-------------------------------------------------------------------- |
 | query               | string |          | Subscriber search by SQL expression.                                  |
 | list_id             | int[]  |          | ID of lists to filter by. Repeat in the query for multiple values.    |
 | subscription_status | string |          | Subscription status to filter by if there are one or more `list_id`s. |
@@ -140,9 +141,9 @@ Retrieve a specific subscriber.
 
 ##### Parameters
 
-| Name          | Type      | Required | Description      |
-|:--------------|:----------|:---------|:-----------------|
-| subscriber_id | Number    | Yes      | Subscriber's ID. |
+| Name          | Type   | Required | Description      |
+| :------------ | :----- | :------- | :--------------- |
+| subscriber_id | Number | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -192,9 +193,9 @@ Export a specific subscriber data that gives profile, list subscriptions, campai
 
 ##### Parameters
 
-| Name          | Type      | Required | Description      |
-|:--------------|:----------|:---------|:-----------------|
-| subscriber_id | Number    | Yes      | Subscriber's ID. |
+| Name          | Type   | Required | Description      |
+| :------------ | :----- | :------- | :--------------- |
+| subscriber_id | Number | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -241,9 +242,9 @@ ______________________________________________________________________
 Get a specific subscriber bounce records.
 ##### Parameters
 
-| Name          | Type      | Required | Description      |
-|:--------------|:----------|:---------|:-----------------|
-| subscriber_id | Number    | Yes      | Subscriber's ID. |
+| Name          | Type   | Required | Description      |
+| :------------ | :----- | :------- | :--------------- |
+| subscriber_id | Number | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -300,14 +301,14 @@ Create a new subscriber.
 
 ##### Parameters
 
-| Name                     | Type      | Required | Description                                                                                          |
-|:-------------------------|:----------|:---------|:-----------------------------------------------------------------------------------------------------|
-| email                    | string    | Yes      | Subscriber's email address.                                                                          |
-| name                     | string    | Yes      | Subscriber's name.                                                                                   |
-| status                   | string    | Yes      | Subscriber's status: `enabled`, `blocklisted`.                                           |
-| lists                    | number\[\]  |          | List of list IDs to subscribe to.                                                                    |
-| attribs                  | JSON      |          | Attributes of the new subscriber.                                                                    |
-| preconfirm_subscriptions | bool      |          | If true, subscriptions are marked as confirmed and no-optin emails are sent for double opt-in lists. |
+| Name                     | Type       | Required | Description                                                                                                                   |
+|:-------------------------|:-----------|:---------|:------------------------------------------------------------------------------------------------------------------------------|
+| email                    | string     | Yes      | Subscriber's email address.                                                                                                   |
+| name                     | string     | Yes      | Subscriber's name.                                                                                                            |
+| status                   | string     | Yes      | Subscriber's status: `enabled`, `blocklisted`.                                                                                |
+| lists                    | number\[\] |          | List of list IDs to subscribe to.                                                                                             |
+| attribs                  | JSON       |          | Optional JSON object attributes for the subscriber that can be used in message templates. Example `{"location": "Somewhere"}` |
+| preconfirm_subscriptions | bool       |          | If true, subscriptions are marked as confirmed and no opt-in emails are sent for double opt-in lists.                         |
 
 ##### Example Request
 
@@ -342,7 +343,7 @@ ______________________________________________________________________
 
 #### POST /api/subscribers/{subscribers_id}/optin
 
-Sends optin confirmation email to subscribers.
+Sends opt-in confirmation email to subscribers.
 
 ##### Example Request
 
@@ -366,11 +367,11 @@ Create a public subscription, accepts both form encoded or JSON encoded body.
 
 ##### Parameters
 
-| Name       | Type      | Required | Description                 |
-|:-----------|:----------|:---------|:----------------------------|
-| email      | string    | Yes      | Subscriber's email address. |
-| name       | string    |          | Subscriber's name.          |
-| list_uuids | string\[\]  | Yes      | List of list UUIDs.         |
+| Name       | Type       | Required | Description                 |
+| :--------- | :--------- | :------- | :-------------------------- |
+| email      | string     | Yes      | Subscriber's email address. |
+| name       | string     |          | Subscriber's name.          |
+| list_uuids | string\[\] | Yes      | List of list UUIDs.         |
 
 ##### Example JSON Request
 
@@ -404,12 +405,12 @@ Modify subscriber list memberships.
 
 ##### Parameters
 
-| Name            | Type      | Required           | Description                                                       |
-|:----------------|:----------|:-------------------|:------------------------------------------------------------------|
-| ids             | number\[\]  | Yes                | Array of user IDs to be modified.                                 |
-| action          | string    | Yes                | Action to be applied: `add`, `remove`, or `unsubscribe`.          |
-| target_list_ids | number\[\]  | Yes                | Array of list IDs to be modified.                                 |
-| status          | string    | Required for `add` | Subscriber status: `confirmed`, `unconfirmed`, or `unsubscribed`. |
+| Name            | Type       | Required           | Description                                                       |
+| :-------------- | :--------- | :----------------- | :---------------------------------------------------------------- |
+| ids             | number\[\] | Yes                | Array of user IDs to be modified.                                 |
+| action          | string     | Yes                | Action to be applied: `add`, `remove`, or `unsubscribe`.          |
+| target_list_ids | number\[\] | Yes                | Array of list IDs to be modified.                                 |
+| status          | string     | Required for `add` | Subscriber status: `confirmed`, `unconfirmed`, or `unsubscribed`. |
 
 ##### Example Request
 
@@ -437,15 +438,65 @@ Update a specific subscriber.
 
 ______________________________________________________________________
 
+#### PATCH /api/subscribers/{subscriber_id}
+
+Partially update a subscriber. Only fields present in the request body are updated. Unlike PUT, omitting the `lists` field preserves existing list subscriptions. `PUT` treats empty `lists` as a signal to clear all subscriptions.
+
+##### Parameters
+
+| Name                     | Type       | Required | Description                                                                                                                       |
+|:-------------------------|:-----------|:---------|:----------------------------------------------------------------------------------------------------------------------------------|
+| email                    | string     |          | Subscriber's email address. Updated only if provided.                                                                             |
+| name                     | string     |          | Subscriber's name. Updated only if provided.                                                                                      |
+| status                   | string     |          | Subscriber's status: `enabled`, `disabled`, `blocklisted`. Updated only if provided.                                              |
+| lists                    | number\[\] |          | Array of list IDs. If provided, replaces the subscriber's current list subscriptions. If omitted, existing subscriptions are kept. |
+| attribs                  | JSON       |          | JSON object of subscriber attributes. If provided, merged with existing attributes.                                               |
+| preconfirm_subscriptions | bool       |          | If true, subscriptions are marked as confirmed and no opt-in emails are sent for double opt-in lists.                             |
+
+##### Example Request
+
+```shell
+curl -u 'api_username:access_token' -X PATCH 'http://localhost:9000/api/subscribers/1' \
+    -H 'Content-Type: application/json' \
+    --data '{"name":"Updated Name"}'
+```
+
+##### Example Response
+
+```json
+{
+  "data": {
+    "id": 1,
+    "created_at": "2020-02-10T23:07:16.199433+01:00",
+    "updated_at": "2020-03-10T16:37:17.228327+01:00",
+    "uuid": "ea06b2e7-4b08-4571-b436-5c5cf31c5cd4",
+    "email": "subscriber@domain.com",
+    "name": "Updated Name",
+    "attribs": {},
+    "status": "enabled",
+    "lists": [{
+      "subscription_status": "unconfirmed",
+      "id": 1,
+      "uuid": "ce13e971-c2ed-4069-bd0c-240e9a9f56f9",
+      "name": "Default list",
+      "type": "public",
+      "optin": "single"
+    }]
+  }
+}
+```
+
+______________________________________________________________________
+
 #### PUT /api/subscribers/{subscriber_id}/blocklist
 
 Blocklist a specific subscriber.
 
 ##### Parameters
 
-| Name          | Type      | Required | Description      |
-|:--------------|:----------|:---------|:-----------------|
-| subscriber_id | Number    | Yes      | Subscriber's ID. |
+| Name          | Type   | Required | Description      |
+| :------------ | :----- | :------- | :--------------- |
+| subscriber_id | Number | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -469,9 +520,9 @@ Blocklist multiple subscriber.
 
 ##### Parameters
 
-| Name          | Type      | Required | Description      |
-|:--------------|:----------|:---------|:-----------------|
-| ids           | Number    | Yes      | Subscriber's ID. |
+| Name | Type   | Required | Description      |
+| :--- | :----- | :------- | :--------------- |
+| ids  | Number | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -497,10 +548,10 @@ Blocklist subscribers based on SQL expression.
 
 ##### Parameters
 
-| Name     | Type     | Required | Description                                 |
-|:---------|:---------|:---------|:--------------------------------------------|
-| query    | string   | Yes      | SQL expression to filter subscribers with.  |
-| list_ids | []number | No       | Optional list IDs to limit the filtering to.|
+| Name     | Type     | Required | Description                                  |
+| :------- | :------- | :------- | :------------------------------------------- |
+| query    | string   | Yes      | SQL expression to filter subscribers with.   |
+| list_ids | []number | No       | Optional list IDs to limit the filtering to. |
 
 ##### Example Request
 
@@ -526,9 +577,9 @@ Delete a specific subscriber.
 
 ##### Parameters
 
-| Name          | Type      | Required | Description      |
-|:--------------|:----------|:---------|:-----------------|
-| subscriber_id | Number    | Yes      | Subscriber's ID. |
+| Name          | Type   | Required | Description      |
+| :------------ | :----- | :------- | :--------------- |
+| subscriber_id | Number | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -552,9 +603,9 @@ Delete a subscriber's bounce records
 
 ##### Parameters
 
-| Name | Type          | Required | Description                |
-|:-----|:--------------|:---------|:---------------------------|
-| id   | subscriber_id | Yes      | Subscriber's ID.           |
+| Name | Type          | Required | Description      |
+| :--- | :------------ | :------- | :--------------- |
+| id   | subscriber_id | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -578,9 +629,9 @@ Delete one or more subscribers.
 
 ##### Parameters
 
-| Name | Type      | Required | Description                |
-|:-----|:----------|:---------|:---------------------------|
-| id   | number\[\]  | Yes      | Array of subscriber's IDs. |
+| Name | Type       | Required | Description                |
+| :--- | :--------- | :------- | :------------------------- |
+| id   | number\[\] | Yes      | Array of subscriber's IDs. |
 
 ##### Example Request
 
@@ -605,7 +656,7 @@ Delete subscribers based on SQL expression.
 ##### Parameters
 
 | Name     | Type     | Required | Description                                                        |
-|:---------|:---------|:---------|:-------------------------------------------------------------------|
+| :------- | :------- | :------- | :----------------------------------------------------------------- |
 | query    | string   | No       | SQL expression to filter subscribers with.                         |
 | list_ids | []number | No       | Optional list IDs to limit the filtering to.                       |
 | all      | bool     | No       | When set to `true`, ignores any query and deletes all subscribers. |

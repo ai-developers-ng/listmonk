@@ -3,6 +3,15 @@
     <h1 class="title is-4">
       {{ $t('analytics.title') }}
     </h1>
+    <div v-if="serverConfig.privacy.disable_tracking || !serverConfig.privacy.individual_tracking"
+      class="notification is-info">
+      <template v-if="serverConfig.privacy.disable_tracking">
+        {{ $t('analytics.trackingDisabled') }}
+      </template>
+      <template v-else-if="!serverConfig.privacy.individual_tracking">
+        {{ $t('analytics.nonIndividualTracking') }}
+      </template>
+    </div>
     <hr />
 
     <form @submit.prevent="onSubmit">
@@ -10,8 +19,9 @@
         <div class="column is-6">
           <b-field :label="$t('globals.terms.campaigns')" label-position="on-border">
             <b-taginput v-model="form.campaigns" :data="queriedCampaigns" name="campaigns" ellipsis icon="tag-outline"
-              :placeholder="$t('globals.terms.campaigns')" autocomplete :allow-new="false"
-              :before-adding="isCampaignSelected" @typing="queryCampaigns" field="name" :loading="isSearchLoading" />
+              :placeholder="$t('globals.terms.campaigns')" autocomplete :allow-new="false" :open-on-focus="true"
+              :before-adding="isCampaignSelected" @typing="queryCampaigns" @focus="queryCampaigns" field="name"
+              :loading="isSearchLoading" />
           </b-field>
         </div>
 
@@ -38,15 +48,6 @@
         </div>
       </div><!-- columns -->
     </form>
-
-    <p class="is-size-7 mt-2 has-text-grey-light">
-      <template v-if="settings['privacy.individual_tracking']">
-        {{ $t('analytics.isUnique') }}
-      </template>
-      <template v-else>
-        {{ $t('analytics.nonUnique') }}
-      </template>
-    </p>
 
     <section class="charts mt-5">
       <div class="chart" v-for="(v, k) in charts" :key="k">
@@ -218,7 +219,7 @@ export default Vue.extend({
         return {
           label: camps[id].name,
           data: points.map((item) => ({ x: this.formatDateTime(item.timestamp), y: item.count })),
-          borderColor: chartColors[n % campIDs.length],
+          borderColor: chartColors[n % chartColors.length],
           borderWidth: 2,
           pointHoverBorderWidth: 5,
           pointBorderWidth: 0.5,
@@ -291,7 +292,7 @@ export default Vue.extend({
   },
 
   computed: {
-    ...mapState(['settings']),
+    ...mapState(['serverConfig']),
   },
 
   created() {

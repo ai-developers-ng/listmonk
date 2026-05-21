@@ -36,6 +36,7 @@ type Queries struct {
 	DeleteOrphanSubscribers         *sqlx.Stmt `query:"delete-orphan-subscribers"`
 	UnsubscribeByCampaign           *sqlx.Stmt `query:"unsubscribe-by-campaign"`
 	ExportSubscriberData            *sqlx.Stmt `query:"export-subscriber-data"`
+	GetSubscriberActivity           *sqlx.Stmt `query:"get-subscriber-activity"`
 
 	// Non-prepared arbitrary subscriber queries.
 	QuerySubscribers                       string     `query:"query-subscribers"`
@@ -76,6 +77,8 @@ type Queries struct {
 	GetCampaignBounceCounts    *sqlx.Stmt `query:"get-campaign-bounce-counts"`
 	DeleteCampaignViews        *sqlx.Stmt `query:"delete-campaign-views"`
 	DeleteCampaignLinkClicks   *sqlx.Stmt `query:"delete-campaign-link-clicks"`
+	ExportCampaignViews        *sqlx.Stmt `query:"export-campaign-views"`
+	ExportCampaignLinkClicks   *sqlx.Stmt `query:"export-campaign-link-clicks"`
 
 	NextCampaigns            *sqlx.Stmt `query:"next-campaigns"`
 	GetRunningCampaign       *sqlx.Stmt `query:"get-running-campaign"`
@@ -87,6 +90,7 @@ type Queries struct {
 	UpdateCampaignArchive    *sqlx.Stmt `query:"update-campaign-archive"`
 	RegisterCampaignView     *sqlx.Stmt `query:"register-campaign-view"`
 	DeleteCampaign           *sqlx.Stmt `query:"delete-campaign"`
+	DeleteCampaigns          *sqlx.Stmt `query:"delete-campaigns"`
 
 	InsertMedia *sqlx.Stmt `query:"insert-media"`
 	GetMedia    *sqlx.Stmt `query:"get-media"`
@@ -100,10 +104,12 @@ type Queries struct {
 	DeleteTemplate     *sqlx.Stmt `query:"delete-template"`
 
 	CreateLink        *sqlx.Stmt `query:"create-link"`
+	GetLinkURL        *sqlx.Stmt `query:"get-link-url"`
 	RegisterLinkClick *sqlx.Stmt `query:"register-link-click"`
 
-	GetSettings    *sqlx.Stmt `query:"get-settings"`
-	UpdateSettings *sqlx.Stmt `query:"update-settings"`
+	GetSettings         *sqlx.Stmt `query:"get-settings"`
+	UpdateSettings      *sqlx.Stmt `query:"update-settings"`
+	UpdateSettingsByKey *sqlx.Stmt `query:"update-settings-by-key"`
 
 	// GetStats *sqlx.Stmt `query:"get-stats"`
 	RecordBounce                *sqlx.Stmt `query:"record-bounce"`
@@ -113,15 +119,17 @@ type Queries struct {
 	DeleteBouncesBySubscriber   *sqlx.Stmt `query:"delete-bounces-by-subscriber"`
 	GetDBInfo                   string     `query:"get-db-info"`
 
-	CreateUser        *sqlx.Stmt `query:"create-user"`
-	UpdateUser        *sqlx.Stmt `query:"update-user"`
-	UpdateUserProfile *sqlx.Stmt `query:"update-user-profile"`
-	UpdateUserLogin   *sqlx.Stmt `query:"update-user-login"`
-	DeleteUsers       *sqlx.Stmt `query:"delete-users"`
-	GetUsers          *sqlx.Stmt `query:"get-users"`
-	GetUser           *sqlx.Stmt `query:"get-user"`
-	GetAPITokens      *sqlx.Stmt `query:"get-api-tokens"`
-	LoginUser         *sqlx.Stmt `query:"login-user"`
+	CreateUser         *sqlx.Stmt `query:"create-user"`
+	UpdateUser         *sqlx.Stmt `query:"update-user"`
+	UpdateUserProfile  *sqlx.Stmt `query:"update-user-profile"`
+	UpdateUserLogin    *sqlx.Stmt `query:"update-user-login"`
+	SetUserTwoFA       *sqlx.Stmt `query:"set-user-twofa"`
+	DeleteUsers        *sqlx.Stmt `query:"delete-users"`
+	GetUsers           *sqlx.Stmt `query:"get-users"`
+	GetUser            *sqlx.Stmt `query:"get-user"`
+	GetAPITokens       *sqlx.Stmt `query:"get-api-tokens"`
+	LoginUser          *sqlx.Stmt `query:"login-user"`
+	DeleteUserSessions *sqlx.Stmt `query:"delete-user-sessions"`
 
 	CreateRole            *sqlx.Stmt `query:"create-role"`
 	GetUserRoles          *sqlx.Stmt `query:"get-user-roles"`

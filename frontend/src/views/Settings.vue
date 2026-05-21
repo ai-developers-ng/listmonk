@@ -106,7 +106,7 @@ export default Vue.extend({
   },
 
   methods: {
-    onSubmit() {
+    async onSubmit() {
       const form = JSON.parse(JSON.stringify(this.form));
 
       // SMTP boxes.
@@ -178,6 +178,12 @@ export default Vue.extend({
         hasDummy = 'forwardemail';
       }
 
+      if (this.isDummy(form['bounce.lettermint'].key)) {
+        form['bounce.lettermint'].key = '';
+      } else if (this.hasDummy(form['bounce.lettermint'].key)) {
+        hasDummy = 'lettermint';
+      }
+
       for (let i = 0; i < form.messengers.length; i += 1) {
         // If it's the dummy UI password placeholder, ignore it.
         if (this.isDummy(form.messengers[i].password)) {
@@ -197,30 +203,13 @@ export default Vue.extend({
       form['privacy.domain_allowlist'] = form['privacy.domain_allowlist'].split('\n').map((v) => v.trim().toLowerCase()).filter((v) => v !== '');
 
       this.isLoading = true;
-      this.$api.updateSettings(form).then((data) => {
-        if (typeof data === 'object' && data !== null && data.needsRestart) {
-          // There are running campaigns and the app didn't auto restart.
-          // The UI will show a warning.
-          this.$root.loadConfig();
-          this.getSettings();
-          this.isLoading = false;
-          return;
-        }
-
-        this.$utils.toast(this.$t('settings.messengers.messageSaved'));
-
-        // Poll until there's a 200 response, waiting for the app
-        // to restart and come back up.
-        const pollId = setInterval(() => {
-          this.$api.getHealth().then(() => {
-            clearInterval(pollId);
-            this.$root.loadConfig();
-            this.getSettings();
-          });
-        }, 1000);
-      }, () => {
+      try {
+        const data = await this.$api.updateSettings(form);
+        await this.$root.awaitRestart(data);
+        this.getSettings();
+      } finally {
         this.isLoading = false;
-      });
+      }
 
       return false;
     },

@@ -142,6 +142,7 @@ func installLists(q *models.Queries) (int, int) {
 		"Default list",
 		models.ListTypePrivate,
 		models.ListOptinSingle,
+		models.ListStatusActive,
 		pq.StringArray{"test"},
 		"",
 	); err != nil {
@@ -152,6 +153,7 @@ func installLists(q *models.Queries) (int, int) {
 		"Opt-in list",
 		models.ListTypePublic,
 		models.ListOptinDouble,
+		models.ListStatusActive,
 		pq.StringArray{"test"},
 		"",
 	); err != nil {
@@ -170,7 +172,7 @@ func installSubs(defListID, optinListID int, q *models.Queries) {
 		`{"type": "known", "good": true, "city": "Bengaluru"}`,
 		pq.Int64Array{int64(defListID)},
 		models.SubscriptionStatusUnconfirmed,
-		true); err != nil {
+		true, true); err != nil {
 		lo.Fatalf("Error creating subscriber: %v", err)
 	}
 	if _, err := q.UpsertSubscriber.Exec(
@@ -180,7 +182,7 @@ func installSubs(defListID, optinListID int, q *models.Queries) {
 		`{"type": "unknown", "good": true, "city": "Bengaluru"}`,
 		pq.Int64Array{int64(optinListID)},
 		models.SubscriptionStatusUnconfirmed,
-		true); err != nil {
+		true, true); err != nil {
 		lo.Fatalf("error creating subscriber: %v", err)
 	}
 }
@@ -257,6 +259,7 @@ func installCampaign(campTplID, archiveTplID int, q *models.Queries) {
 		"richtext",
 		nil,
 		json.RawMessage("[]"),
+		json.RawMessage("{}"),
 		pq.StringArray{"test-campaign"},
 		emailMsgr,
 		campTplID,
@@ -284,7 +287,7 @@ func recordMigrationVersion(ver string, db *sqlx.DB) error {
 
 func newConfigFile(path string) error {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		return fmt.Errorf("%s exists. Remove it to generate a new one", path)
+		return fmt.Errorf("error creating %s: %v", path, err)
 	}
 
 	// Initialize the static file system into which all

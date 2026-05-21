@@ -9,9 +9,11 @@ email-builder/node_modules/
 email-builder/.cache/
 email-builder/yarn.lock
 email-builder/dist/
+static/public/static/altcha.umd.js
 .vscode/
 
 config.toml
+docker-compose.override.yml
 node_modules
 listmonk
 dist/*

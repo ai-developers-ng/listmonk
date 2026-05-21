@@ -1,13 +1,14 @@
 # API / Lists
 
 | Method | Endpoint                                        | Description               |
-|:-------|:------------------------------------------------|:--------------------------|
+| :----- | :---------------------------------------------- | :------------------------ |
 | GET    | [/api/lists](#get-apilists)                     | Retrieve all lists.       |
-| GET    | [/api/public/lists](#get-public-apilists)       | Retrieve public lists.|
+| GET    | [/api/public/lists](#get-public-apilists)       | Retrieve public lists.    |
 | GET    | [/api/lists/{list_id}](#get-apilistslist_id)    | Retrieve a specific list. |
 | POST   | [/api/lists](#post-apilists)                    | Create a new list.        |
 | PUT    | [/api/lists/{list_id}](#put-apilistslist_id)    | Update a list.            |
 | DELETE | [/api/lists/{list_id}](#delete-apilistslist_id) | Delete a list.            |
+| DELETE | [/api/lists](#delete-apilists)                  | Delete multiple lists.    |
 
 ______________________________________________________________________
 
@@ -15,22 +16,32 @@ ______________________________________________________________________
 
 Retrieve lists.
 
+> **Note:** Lists with `status: archived` are hidden from list selectors in campaigns, public subscription forms, and roles by default. They can only be viewed by filtering with `status=archived` or by viewing all lists without a status filter.
+
 ##### Parameters
 
-| Name     | Type     | Required | Description                                                      |
-|:---------|:---------|:---------|:-----------------------------------------------------------------|
-| query    | string   |          | string for list name search.                                     |
-| status   | []string |          | Status to filter lists. Repeat in the query for multiple values. |
-| tag      | []string |          | Tags to filter lists. Repeat in the query for multiple values.   |
-| order_by | string   |          | Sort field. Options: name, status, created_at, updated_at.       |
-| order    | string   |          | Sorting order. Options: ASC, DESC.                               |
-| page     | number   |          | Page number for pagination.                                      |
-| per_page | number   |          | Results per page. Set to 'all' to return all results.            |
+| Name     | Type     | Required | Description                                                                                        |
+| :------- | :------- | :------- | :------------------------------------------------------------------------------------------------- |
+| query    | string   |          | String for list name search.                                                                       |
+| status   | string   |          | Status to filter lists. Options: active, archived. Defaults to showing all lists if not specified. |
+| minimal  | boolean  |          | If true, returns lists without subscriber counts (faster). Defaults to false.                      |
+| tag      | []string |          | Tags to filter lists. Repeat in the query for multiple values.                                     |
+| order_by | string   |          | Sort field. Options: name, status, created_at, updated_at.                                         |
+| order    | string   |          | Sorting order. Options: ASC, DESC.                                                                 |
+| page     | number   |          | Page number for pagination.                                                                        |
+| per_page | number   |          | Results per page. Set to 'all' to return all results.                                              |
 
 ##### Example Request
 
 ```shell
+# Get all lists
 curl -u "api_user:token" -X GET 'http://localhost:9000/api/lists?page=1&per_page=100'
+
+# Get only active lists
+curl -u "api_user:token" -X GET 'http://localhost:9000/api/lists?status=active&per_page=100'
+
+# Get archived lists with minimal data
+curl -u "api_user:token" -X GET 'http://localhost:9000/api/lists?status=archived&minimal=true&per_page=all'
 ```
 
 ##### Example Response
@@ -47,6 +58,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/lists?page=1&per_page
                 "name": "Default list",
                 "type": "public",
                 "optin": "double",
+                "status": "active",
                 "tags": [
                     "test"
                 ],
@@ -60,6 +72,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/lists?page=1&per_page
                 "name": "get",
                 "type": "private",
                 "optin": "single",
+                "status": "active",
                 "tags": [],
                 "subscriber_count": 0
             }
@@ -76,6 +89,8 @@ ______________________________________________________________________
 #### GET /api/public/lists
 
 Retrieve public lists with name and uuid to submit a subscription. This is an unauthenticated call to enable scripting to subscription form.
+
+> **Note:** This endpoint only returns lists with `type: public` and `status: active`. Archived lists are never shown on public subscription forms.
 
 ##### Example Request
 
@@ -101,9 +116,9 @@ Retrieve a specific list.
 
 ##### Parameters
 
-| Name    | Type      | Required | Description                 |
-|:--------|:----------|:---------|:----------------------------|
-| list_id | number    | Yes      | ID of the list to retrieve. |
+| Name    | Type   | Required | Description                 |
+| :------ | :----- | :------- | :-------------------------- |
+| list_id | number | Yes      | ID of the list to retrieve. |
 
 ##### Example Request
 
@@ -123,6 +138,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/lists/5'
         "name": "Test list",
         "type": "public",
         "optin": "double",
+        "status": "active",
         "tags": [],
         "subscriber_count": 0
     }
@@ -137,13 +153,14 @@ Create a new list.
 
 ##### Parameters
 
-| Name  | Type      | Required | Description                             |
-|:------|:----------|:---------|:----------------------------------------|
-| name  | string    | Yes      | Name of the new list.                   |
-| type  | string    | Yes      | Type of list. Options: private, public. |
-| optin | string    | Yes      | Opt-in type. Options: single, double.   |
-| tags  | string\[\]  |          | Associated tags for a list.             |
-| description | string | No | Description of the new list. |
+| Name        | Type       | Required | Description                                                        |
+| :---------- | :--------- | :------- | :----------------------------------------------------------------- |
+| name        | string     | Yes      | Name of the new list.                                              |
+| type        | string     | Yes      | Type of list. Options: private, public.                            |
+| optin       | string     | Yes      | Opt-in type. Options: single, double.                              |
+| status      | string     | No       | Status of the list. Options: active, archived. Defaults to active. |
+| tags        | string\[\] |          | Associated tags for a list.                                        |
+| description | string     | No       | Description of the new list.                                       |
 
 ##### Example Request
 
@@ -162,12 +179,13 @@ curl -u "api_user:token" -X POST 'http://localhost:9000/api/lists'
         "uuid": "1bb246ab-7417-4cef-bddc-8fc8fc941d3a",
         "name": "Test list",
         "type": "public",
+        "optin": "single",
+        "status": "active",
         "tags": [],
         "subscriber_count": 0,
         "description": "This is a test list"
     }
 }
-null
 ```
 
 ______________________________________________________________________
@@ -178,14 +196,15 @@ Update a list.
 
 ##### Parameters
 
-| Name    | Type      | Required | Description                             |
-|:--------|:----------|:---------|:----------------------------------------|
-| list_id | number    | Yes      | ID of the list to update.               |
-| name    | string    |          | New name for the list.                  |
-| type    | string    |          | Type of list. Options: private, public. |
-| optin   | string    |          | Opt-in type. Options: single, double.   |
-| tags    | string\[\]  |          | Associated tags for the list.           |
-| description | string |         | Description of the new list.            |
+| Name        | Type       | Required | Description                                    |
+| :---------- | :--------- | :------- | :--------------------------------------------- |
+| list_id     | number     | Yes      | ID of the list to update.                      |
+| name        | string     |          | New name for the list.                         |
+| type        | string     |          | Type of list. Options: private, public.        |
+| optin       | string     |          | Opt-in type. Options: single, double.          |
+| status      | string     |          | Status of the list. Options: active, archived. |
+| tags        | string\[\] |          | Associated tags for the list.                  |
+| description | string     |          | Description of the list.                       |
 
 ##### Example Request
 
@@ -207,6 +226,7 @@ curl -u "api_user:token" -X PUT 'http://localhost:9000/api/lists/5' \
         "name": "modified test list",
         "type": "private",
         "optin": "single",
+        "status": "active",
         "tags": [],
         "subscriber_count": 0,
         "description": "This is a test list"
@@ -222,14 +242,49 @@ Delete a specific list.
 
 ##### Parameters
 
-| Name    | Type      | Required | Description               |
-|:--------|:----------|:---------|:--------------------------|
-| list_id | Number    | Yes      | ID of the list to delete. |
+| Name    | Type   | Required | Description               |
+| :------ | :----- | :------- | :------------------------ |
+| list_id | Number | Yes      | ID of the list to delete. |
 
 ##### Example Request
 
 ```shell
 curl -u 'api_username:access_token' -X DELETE 'http://localhost:9000/api/lists/1'
+```
+
+##### Example Response
+
+```json
+{
+    "data": true
+}
+```
+
+______________________________________________________________________
+
+#### DELETE /api/lists
+
+Delete multiple lists by IDs or by a search query.
+
+> **Note:** Users can only delete lists they have `manage` permission for. Any lists in the query that the user doesn't have permission to manage is ignored.
+
+##### Parameters
+
+| Name  | Type       | Required                      | Description                                                        |
+| :---- | :--------- | :---------------------------- | :----------------------------------------------------------------- |
+| id    | number\[\] | Yes (if `query` not provided) | One or more list IDs to delete.                                    |
+| query | string     | Yes (if `id` not provided)    | Search query to filter lists for deletion (same as the GET query). |
+
+##### Example Request (by IDs)
+
+```shell
+curl -u "api_user:token" -X DELETE 'http://localhost:9000/api/lists?id=10&id=11&id=12'
+```
+
+##### Example Request (by search query)
+
+```shell
+curl -u "api_user:token" -X DELETE 'http://localhost:9000/api/lists?query=test%20list'
 ```
 
 ##### Example Response

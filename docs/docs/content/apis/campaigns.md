@@ -1,7 +1,7 @@
 # API / Campaigns
 
 | Method | Endpoint                                                                    | Description                               |
-|:-------|:----------------------------------------------------------------------------|:------------------------------------------|
+| :----- | :-------------------------------------------------------------------------- | :---------------------------------------- |
 | GET    | [/api/campaigns](#get-apicampaigns)                                         | Retrieve all campaigns.                   |
 | GET    | [/api/campaigns/{campaign_id}](#get-apicampaignscampaign_id)                | Retrieve a specific campaign.             |
 | GET    | [/api/campaigns/{campaign_id}/preview](#get-apicampaignscampaign_idpreview) | Retrieve preview of a campaign.           |
@@ -13,6 +13,7 @@
 | PUT    | [/api/campaigns/{campaign_id}/status](#put-apicampaignscampaign_idstatus)   | Change status of a campaign.              |
 | PUT    | [/api/campaigns/{campaign_id}/archive](#put-apicampaignscampaign_idarchive) | Publish campaign to public archive.       |
 | DELETE | [/api/campaigns/{campaign_id}](#delete-apicampaignscampaign_id)             | Delete a campaign.                        |
+| DELETE | [/api/campaigns](#delete-apicampaigns)                                      | Delete multiple campaigns.                |
 
 ____________________________________________________________________________________________________________________________________
 
@@ -28,16 +29,16 @@ Retrieve all campaigns.
 
 ##### Parameters
 
-| Name     | Type     | Required | Description                                                          |
-|:---------|:---------|:---------|:---------------------------------------------------------------------|
-| order    | string   |          | Sorting order: ASC for ascending, DESC for descending.               |
-| order_by | string   |          | Result sorting field. Options: name, status, created_at, updated_at. |
-| query    | string   |          | SQL query expression to filter campaigns.                            |
-| status   | []string |          | Status to filter campaigns. Repeat in the query for multiple values. |
-| tags     | []string |          | Tags to filter campaigns. Repeat in the query for multiple values.   |
-| page     | number   |          | Page number for paginated results.                                   |
-| per_page | number   |          | Results per page. Set as 'all' for all results.                      |
-| no_body  | boolean   |          | When set to true, returns response without body content.                      |
+| Name     | Type     | Required | Description                                                              |
+| :------- | :------- | :------- | :----------------------------------------------------------------------- |
+| order    | string   |          | Sorting order: ASC for ascending, DESC for descending.                   |
+| order_by | string   |          | Result sorting field. Options: name, status, created_at, updated_at.     |
+| query    | string   |          | String to filtter by campaign name and subject (fulltext and substring). |
+| status   | []string |          | Status to filter campaigns. Repeat in the query for multiple values.     |
+| tags     | []string |          | Tags to filter campaigns. Repeat in the query for multiple values.       |
+| page     | number   |          | Page number for paginated results.                                       |
+| per_page | number   |          | Results per page. Set as 'all' for all results.                          |
+| no_body  | boolean  |          | When set to true, returns response without body content.                 |
 
 ##### Example Response
 
@@ -93,10 +94,10 @@ Retrieve a specific campaign.
 
 ##### Parameters
 
-| Name        | Type      | Required | Description  |
-|:------------|:----------|:---------|:-------------|
-| campaign_id | number    | Yes      | Campaign ID. |
-| no_body  | boolean   |          | When set to true, returns response without body content.                      |
+| Name        | Type    | Required | Description                                              |
+| :---------- | :------ | :------- | :------------------------------------------------------- |
+| campaign_id | number  | Yes      | Campaign ID.                                             |
+| no_body     | boolean |          | When set to true, returns response without body content. |
 
 ##### Example Request
 
@@ -150,9 +151,9 @@ Preview a specific campaign.
 
 ##### Parameters
 
-| Name        | Type      | Required | Description             |
-|:------------|:----------|:---------|:------------------------|
-| campaign_id | number    | Yes      | Campaign ID to preview. |
+| Name        | Type   | Required | Description             |
+| :---------- | :----- | :------- | :---------------------- |
+| campaign_id | number | Yes      | Campaign ID to preview. |
 
 ##### Example Request
 
@@ -175,9 +176,9 @@ Retrieve stats of specified campaigns.
 
 ##### Parameters
 
-| Name        | Type      | Required | Description                    |
-|:------------|:----------|:---------|:-------------------------------|
-| campaign_id | number    | Yes      | Campaign IDs to get stats for. |
+| Name        | Type   | Required | Description                    |
+| :---------- | :----- | :------- | :----------------------------- |
+| campaign_id | number | Yes      | Campaign IDs to get stats for. |
 
 ##### Example Request
 
@@ -201,12 +202,12 @@ Retrieve stats of specified campaigns.
 
 ##### Parameters
 
-| Name        | Type      | Required | Description                                   |
-|:------------|:----------|:---------|:----------------------------------------------|
-| id          |number\[\] | Yes      | Campaign IDs to get stats for.                |
-| type        |string     | Yes      | Analytics type: views, links, clicks, bounces |
-| from        |string     | Yes      | Start value of date range.                |
-| to          |string     | Yes      | End value of date range.                |
+| Name | Type       | Required | Description                                   |
+| :--- | :--------- | :------- | :-------------------------------------------- |
+| id   | number\[\] | Yes      | Campaign IDs to get stats for.                |
+| type | string     | Yes      | Analytics type: views, links, clicks, bounces |
+| from | string     | Yes      | Start value of date range.                    |
+| to   | string     | Yes      | End value of date range.                      |
 
 
 ##### Example Request
@@ -288,22 +289,23 @@ Create a new campaign.
 
 ##### Parameters
 
-| Name         | Type       | Required | Description                                                                             |
-|:-------------|:-----------|:---------|:----------------------------------------------------------------------------------------|
-| name         | string     | Yes      | Campaign name.                                                                          |
-| subject      | string     | Yes      | Campaign email subject.                                                                 |
-| lists        | number\[\] | Yes      | List IDs to send campaign to.                                                           |
-| from_email   | string     |          | 'From' email in campaign emails. Defaults to value from settings if not provided.       |
-| type         | string     | Yes      | Campaign type: 'regular' or 'optin'.                                                    |
-| content_type | string     | Yes      | Content type: 'richtext', 'html', 'markdown', 'plain', 'visual'.                        |
-| body         | string     | Yes      | Content body of campaign.                                                               |
-| body_source  | string     |          | If content_type is `visual`, the JSON block source of the body.                         |
-| altbody      | string     |          | Alternate plain text body for HTML (and richtext) emails.                               |
-| send_at      | string     |          | Timestamp to schedule campaign. Format: 'YYYY-MM-DDTHH:MM:SSZ'.                         |
-| messenger    | string     |          | 'email' or a custom messenger defined in settings. Defaults to 'email' if not provided. |
-| template_id  | number     |          | Template ID to use. Defaults to default template if not provided.                       |
-| tags         | string\[\] |          | Tags to mark campaign.                                                                  |
-| headers      | JSON       |          | Key-value pairs to send as SMTP headers. Example: \[{"x-custom-header": "value"}\].     |
+| Name         | Type       | Required | Description                                                                                                            |
+| :----------- | :--------- | :------- | :--------------------------------------------------------------------------------------------------------------------- |
+| name         | string     | Yes      | Campaign name.                                                                                                         |
+| subject      | string     | Yes      | Campaign email subject.                                                                                                |
+| lists        | number\[\] | Yes      | List IDs to send campaign to.                                                                                          |
+| from_email   | string     |          | 'From' email in campaign emails. Defaults to value from settings if not provided.                                      |
+| type         | string     | Yes      | Campaign type: 'regular' or 'optin'.                                                                                   |
+| content_type | string     | Yes      | Content type: 'richtext', 'html', 'markdown', 'plain', 'visual'.                                                       |
+| body         | string     | Yes      | Content body of campaign.                                                                                              |
+| body_source  | string     |          | If content_type is `visual`, the JSON block source of the body.                                                        |
+| altbody      | string     |          | Alternate plain text body for HTML (and richtext) emails.                                                              |
+| send_at      | string     |          | Timestamp to schedule campaign. Format: 'YYYY-MM-DDTHH:MM:SSZ'.                                                        |
+| messenger    | string     |          | 'email' or a custom messenger defined in settings. Defaults to 'email' if not provided.                                |
+| template_id  | number     |          | Template ID to use. Defaults to default template if not provided.                                                      |
+| tags         | string\[\] |          | Tags to mark campaign.                                                                                                 |
+| headers      | JSON       |          | Key-value pairs to send as SMTP headers. Supports template expressions (e.g., `{{ .Subscriber.UUID }}`). Example: \[{"x-custom-header": "value"}, {"x-subscriber": "{{ .Subscriber.UUID }}"}\]. |
+| attribs      | JSON       |          | Optional JSON object attributes that can be used in the campaign message template. Example `{"location": "Somewhere"}` |
 
 ##### Example request
 
@@ -342,7 +344,9 @@ curl -u "api_user:token" 'http://localhost:9000/api/campaigns' -X POST -H 'Conte
         "content_type": "richtext",
         "tags": ["test"],
         "template_id": 1,
-        "messenger": "email"
+        "messenger": "email",
+        "headers": {},
+        "attribs": {}
     }
 }
 ```
@@ -357,8 +361,8 @@ Use the same parameters in [POST /api/campaigns](#post-apicampaigns) in addition
 
 ##### Parameters
 
-| Name        | Type     | Required | Description                                        |
-|:------------|:---------|:---------|:---------------------------------------------------|
+| Name        | Type       | Required | Description                                        |
+| :---------- | :--------- | :------- | :------------------------------------------------- |
 | subscribers | string\[\] | Yes      | List of subscriber e-mails to send the message to. |
 
 ______________________________________________________________________
@@ -385,10 +389,10 @@ Change status of a campaign.
 
 ##### Parameters
 
-| Name        | Type      | Required | Description                                                             |
-|:------------|:----------|:---------|:------------------------------------------------------------------------|
-| campaign_id | number    | Yes      | Campaign ID to change status.                                           |
-| status      | string    | Yes      | New status for campaign: 'scheduled', 'running', 'paused', 'cancelled'. |
+| Name        | Type   | Required | Description                                                             |
+| :---------- | :----- | :------- | :---------------------------------------------------------------------- |
+| campaign_id | number | Yes      | Campaign ID to change status.                                           |
+| status      | string | Yes      | New status for campaign: 'scheduled', 'running', 'paused', 'cancelled'. |
 
 ##### Note
 
@@ -450,13 +454,13 @@ Publish campaign to public archive.
 
 ##### Parameters
 
-| Name               | Type       | Required | Description                                                              |
-|:-------------------|:-----------|:---------|:-------------------------------------------------------------------------|
-| campaign_id        | number     | Yes      | Campaign ID to publish to public archive.                                |
-| archive            | bool       | Yes      | State of the public archive.                                             |
-| archive_template_id| number     | No       | Archive template id. Defaults to 0.                                      |
-| archive_meta       | JSON string| No       | Optional Metadata to use in campaign message or template.Eg: name, email.|
-| archive_slug       | string     | No       | Name for page to be used in public archive URL                           |
+| Name                | Type        | Required | Description                                                               |
+| :------------------ | :---------- | :------- | :------------------------------------------------------------------------ |
+| campaign_id         | number      | Yes      | Campaign ID to publish to public archive.                                 |
+| archive             | bool        | Yes      | State of the public archive.                                              |
+| archive_template_id | number      | No       | Archive template id. Defaults to 0.                                       |
+| archive_meta        | JSON string | No       | Optional Metadata to use in campaign message or template.Eg: name, email. |
+| archive_slug        | string      | No       | Name for page to be used in public archive URL                            |
 
 
 ##### Example Request
@@ -489,14 +493,47 @@ Delete a campaign.
 
 ##### Parameters
 
-| Name        | Type      | Required | Description            |
-|:------------|:----------|:---------|:-----------------------|
-| campaign_id | number    | Yes      | Campaign ID to delete. |
+| Name        | Type   | Required | Description            |
+| :---------- | :----- | :------- | :--------------------- |
+| campaign_id | number | Yes      | Campaign ID to delete. |
 
 ##### Example Request
 
 ```shell
 curl -u "api_user:token" -X DELETE 'http://localhost:9000/api/campaigns/34'
+```
+
+##### Example Response
+
+```json
+{
+    "data": true
+}
+```
+
+______________________________________________________________________
+
+#### DELETE /api/campaigns
+
+Delete multiple campaigns by IDs or by a search query.
+
+##### Parameters
+
+| Name  | Type       | Required                      | Description                                                                 |
+| :---- | :--------- | :---------------------------- | :-------------------------------------------------------------------------- |
+| id    | number\[\] | Yes (if `query` not provided) | Onr or more campaign IDs to delete.                                         |
+| query | string     | Yes (if `id` not provided)    | Fulltext search query to filter campaigns for deletion (same as GET query). |
+
+##### Example Request (by IDs)
+
+```shell
+curl -u "api_user:token" -X DELETE 'http://localhost:9000/api/campaigns?id=10&id=11&id=12'
+```
+
+##### Example Request (by search query)
+
+```shell
+curl -u "api_user:token" -X DELETE 'http://localhost:9000/api/campaigns?query=test%20campaign'
 ```
 
 ##### Example Response

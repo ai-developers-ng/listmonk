@@ -23,27 +23,27 @@
       </div>
 
       <div class="column is-6">
-        <div v-if="canManage" class="buttons">
+        <div v-if="canManage || canSend" class="buttons">
           <b-field grouped v-if="isEditing && canEdit">
-            <b-field expanded>
+            <b-field v-if="canManage" expanded>
               <b-button expanded @click="() => onSubmit('update')" :loading="loading.campaigns" type="is-primary"
                 icon-left="content-save-outline" data-cy="btn-save" aria-keyshortcuts="ctrl+s">
                 <span class="has-kbd">{{ $t('globals.buttons.saveChanges') }} <span class="kbd">Ctrl+S</span></span>
               </b-button>
             </b-field>
-            <b-field expanded v-if="canStart">
+            <b-field expanded v-if="canSend && canStart">
               <b-button expanded @click="startCampaign" :loading="loading.campaigns" type="is-primary"
                 icon-left="rocket-launch-outline" data-cy="btn-start">
                 {{ $t('campaigns.start') }}
               </b-button>
             </b-field>
-            <b-field expanded v-if="canSchedule">
+            <b-field expanded v-if="canSend && canSchedule">
               <b-button expanded @click="startCampaign" :loading="loading.campaigns" type="is-primary"
                 icon-left="clock-start" data-cy="btn-schedule">
                 {{ $t('campaigns.schedule') }}
               </b-button>
             </b-field>
-            <b-field expanded v-if="canUnSchedule">
+            <b-field expanded v-if="canSend && canUnSchedule">
               <b-button expanded @click="$utils.confirm(null, unscheduleCampaign)" :loading="loading.campaigns"
                 type="is-primary" icon-left="clock-start" data-cy="btn-unschedule">
                 {{ $t('campaigns.unSchedule') }}
@@ -221,6 +221,15 @@
         </div>
       </b-tab-item><!-- content -->
 
+      <b-tab-item :label="$t('globals.terms.attribs')" icon="code" value="attribs" :disabled="isNew">
+        <section class="wrap">
+          <b-field :label="$t('globals.terms.attribs')" :message="$t('campaigns.attribsHelp')"
+            label-position="on-border">
+            <b-input v-model="form.attribsStr" type="textarea" :disabled="!canEdit" rows="15" />
+          </b-field>
+        </section>
+      </b-tab-item><!-- attribs -->
+
       <b-tab-item :label="$t('campaigns.archive')" icon="newspaper-variant-outline" value="archive" :disabled="isNew">
         <section class="wrap">
           <div class="columns">
@@ -317,11 +326,11 @@ import htmlToPlainText from 'textversionjs';
 import Vue from 'vue';
 import { mapState } from 'vuex';
 
+import CampaignPreview from '../components/CampaignPreview.vue';
 import CopyText from '../components/CopyText.vue';
 import Editor from '../components/Editor.vue';
 import ListSelector from '../components/ListSelector.vue';
 import Media from './Media.vue';
-import CampaignPreview from '../components/CampaignPreview.vue';
 
 export default Vue.extend({
   components: {
@@ -363,6 +372,7 @@ export default Vue.extend({
         fromEmail: '',
         headersStr: '[]',
         headers: [],
+        attribsStr: '{}',
         messenger: 'email',
         lists: [],
         tags: [],
@@ -471,6 +481,23 @@ export default Vue.extend({
         }
       }
 
+      // Validate custom JSON attribs.
+      let attribs = null;
+      if (this.form.attribsStr && this.form.attribsStr.trim()) {
+        try {
+          attribs = JSON.parse(this.form.attribsStr);
+        } catch (e) {
+          this.$utils.toast(
+            `${this.$t('subscribers.invalidJSON')}: ${e.toString()}`,
+            'is-danger',
+
+            3000,
+          );
+          return;
+        }
+      }
+      this.form.attribs = attribs;
+
       switch (typ) {
         case 'create':
           this.createCampaign();
@@ -492,6 +519,7 @@ export default Vue.extend({
           ...data,
           headersStr: JSON.stringify(data.headers, null, 4),
           archiveMetaStr: data.archiveMeta ? JSON.stringify(data.archiveMeta, null, 4) : '{}',
+          attribsStr: data.attribs ? JSON.stringify(data.attribs, null, 4) : '{}',
 
           // The structure that is populated by editor input event.
           content: {
@@ -550,6 +578,7 @@ export default Vue.extend({
         tags: this.form.tags,
         send_at: this.form.sendLater ? this.form.sendAtDate : null,
         headers: this.form.headers,
+        attribs: this.form.attribs,
         media: this.form.media.map((m) => m.id),
       };
 
@@ -571,6 +600,7 @@ export default Vue.extend({
         tags: this.form.tags,
         send_at: this.form.sendLater ? this.form.sendAtDate : null,
         headers: this.form.headers,
+        attribs: this.form.attribs,
         template_id: this.form.content.templateId,
         content_type: this.form.content.contentType,
         body: this.form.content.body,
@@ -596,6 +626,7 @@ export default Vue.extend({
         this.$api.updateCampaign(this.data.id, data).then((d) => {
           this.data = d;
           this.form.archiveSlug = d.archiveSlug;
+          this.form.attribsStr = d.attribs ? JSON.stringify(d.attribs, null, 4) : '{}';
 
           this.$utils.toast(this.$t(typMsg, { name: d.name }));
           resolve();
@@ -661,6 +692,10 @@ export default Vue.extend({
 
     canManage() {
       return this.$can('campaigns:manage_all', 'campaigns:manage');
+    },
+
+    canSend() {
+      return this.$can('campaigns:send');
     },
 
     canEdit() {

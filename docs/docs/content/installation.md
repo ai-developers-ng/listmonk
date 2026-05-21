@@ -34,8 +34,6 @@ Then, visit `http://localhost:9000` to create the Super Admin user and login.
     `LISTMONK_ADMIN_USER=myuser LISTMONK_ADMIN_PASSWORD=xxxxx docker compose up -d`
 
 
-------------
-
 ### Mounting a custom config.toml
 The docker-compose file includes all necessary listmonk configuration as environment variables, `LISTMONK_*`.
 If you would like to remove those and mount a config.toml instead:
@@ -74,6 +72,18 @@ max_lifetime = "300s"
 command: [sh, -c, "./listmonk --install --idempotent --yes --config /listmonk/config.toml && ./listmonk --upgrade --yes --config /listmonk/config.toml && ./listmonk --config /listmonk/config.toml"]
 ```
 
+-----------
+
+## Nightly
+
+!!! Warning
+    Nightly releases are untested and may have bugs. Use at your own risk. Always take a backup of your Postgres database before using a nightly release.
+
+A nightly build is automatically published with the latest changes merged to the repository. If you want to access the latest changes without waiting for versioned releases, you can obtain the nightly builds and follow the same instructions above.
+
+- **Docker**: `listmonk/listmonk:nightly` (use this as the image name in the docker-compose file)
+- **Binary**: [Download nightly release](https://github.com/knadh/listmonk/releases/nightly)
+
 
 ## Compiling from source
 
@@ -83,9 +93,6 @@ To compile the latest unreleased version (`master` branch):
 2. `git clone git@github.com:knadh/listmonk.git`
 3. `cd listmonk && make dist`. This will generate the `listmonk` binary.
 
-## Release candidate (RC)
-
-The `master` branch with bleeding edge changes is periodically built and published as `listmonk/listmonk:rc` on DockerHub. To run the latest pre-release version, replace all instances of `listmonk/listmonk:latest` with `listmonk/listmonk:rc` in the docker-compose.yml file and follow the Docker installation steps above. While it is generally safe to run release candidate versions, they may have issues that only get resolved in a general release.
 
 ## Helm chart for Kubernetes
 
@@ -111,6 +118,8 @@ $ helm upgrade \
 <br />
 <a href="https://www.pikapods.com/pods?run=listmonk"><img src="https://www.pikapods.com/static/run-button.svg" alt="Deploy on PikaPod" style="max-width: 150px;" /></a>
 <br />
+<a href="https://northflank.com/stacks/deploy-listmonk"><img src="https://assets.northflank.com/deploy_to_northflank_smm_36700fb050.svg" alt="One-click deploy on Northflank" height="35" style="max-width: 150px; border-radius: 6px; object-fit: contain;" /></a>
+<br />
 <a href="https://railway.app/new/template/listmonk"><img src="https://railway.app/button.svg" alt="One-click deploy on Railway" style="max-width: 150px;" /></a>
 <br />
 <a href="https://repocloud.io/details/?app_id=217"><img src="https://d16t0pc4846x52.cloudfront.net/deploy.png" alt="Deploy at RepoCloud" style="max-width: 150px;"/></a>
@@ -118,6 +127,8 @@ $ helm upgrade \
 <a href="https://template.sealos.io/deploy?templateName=listmonk"><img src="https://sealos.io/Deploy-on-Sealos.svg" alt="Deploy on Sealos" style="max-width: 150px;"/></a>
 <br />
 <a href="https://zeabur.com/templates/5EDMN6"><img src="https://zeabur.com/button.svg" alt="Deploy on Zeabur" style="max-width: 150px;"/></a>
+<br />
+<a href="https://www.cloudron.io/store/app.listmonk.cloudronapp.html"><img src="https://cloudron.io/img/button.svg" alt="Install on Cloudron" style="max-width: 150px;"/></a>
 
 ## Tutorials
 * [Listmonk with Forward Email for Secure Newsletter Delivery](https://forwardemail.net/en/guides/newsletter-with-listmonk)
@@ -132,4 +143,4 @@ $ helm upgrade \
 * [*Docker on Rocky Linux 8* (nginx, Let's Encrypt SSL)](https://wiki.crowncloud.net/?How_to_Install_Listmonk_with_Docker_on_Rocky_Linux_8)
 * [*Docker* with nginx reverse proxy, certbot SSL, and Gmail SMTP](https://www.maketecheasier.com/create-own-newsletter-with-listmonk/)
 * [Install Listmonk on Self-hosting with *Pre-Configured AMI Package at AWS* by Single Click](https://meetrix.io/articles/how-to-install-llama-2-on-aws-with-pre-configured-ami-package/)
-* [Tutorial for deploying on *Fly.io*](https://github.com/paulrudy/listmonk-on-fly) -- Currently [not working](https://github.com/knadh/listmonk/issues/984#issuecomment-1694545255)
+* [*Fly.io* working example](https://gitlab.com/votelog/apps/newsletter)

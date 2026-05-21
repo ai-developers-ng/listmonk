@@ -4,7 +4,8 @@ LAST_COMMIT := $(or $(shell git rev-parse --short HEAD 2> /dev/null),$(shell hea
 # Try to get the semver from 1) git 2) the VERSION file 3) fallback.
 VERSION := $(or $(LISTMONK_VERSION),$(shell git describe --tags --abbrev=0 2> /dev/null),$(shell grep -oP 'tag: \Kv\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?' VERSION),"v0.0.0")
 
-BUILDSTR := ${VERSION} (\#${LAST_COMMIT} $(shell date -u +"%Y-%m-%dT%H:%M:%S%z"))
+BUILDDATE := $(if $(SOURCE_DATE_EPOCH),$(shell date -u -d @$(SOURCE_DATE_EPOCH) +"%Y-%m-%dT%H:%M:%S%z"),$(shell date -u +"%Y-%m-%dT%H:%M:%S%z"))
+BUILDSTR := ${VERSION} (\#${LAST_COMMIT} $(BUILDDATE))
 
 YARN ?= yarn
 GOPATH ?= $(HOME)/go
@@ -33,11 +34,14 @@ FRONTEND_EMAIL_BUILDER_DEPS = \
 
 BIN := listmonk
 STATIC := config.toml.sample \
-	schema.sql queries.sql permissions.json \
+	schema.sql queries:/queries permissions.json \
 	static/public:/public \
 	static/email-templates \
 	frontend/dist:/admin \
 	i18n:/i18n
+
+SQL := $(shell find . -type f -name "*.sql") $(shell find queries -type f -name "*.sql")
+SRC := $(shell find . -type f -name "*.go")
 
 .PHONY: build
 build: $(BIN)
@@ -54,7 +58,7 @@ $(FRONTEND_EMAIL_BUILDER_YARN_MODULES): frontend/package.json frontend/yarn.lock
 	touch -c $(FRONTEND_EMAIL_BUILDER_YARN_MODULES)
 
 # Build the backend to ./listmonk.
-$(BIN): $(shell find . -type f -name "*.go") go.mod go.sum schema.sql queries.sql permissions.json
+$(BIN): $(SRC) go.mod go.sum schema.sql $(SQL) permissions.json
 	CGO_ENABLED=0 go build -o ${BIN} -ldflags="-s -w -X 'main.buildString=${BUILDSTR}' -X 'main.versionString=${VERSION}'" cmd/*.go
 
 # Run the backend in dev mode. The frontend assets in dev mode are loaded from disk from frontend/dist.

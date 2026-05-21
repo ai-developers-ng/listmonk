@@ -120,8 +120,17 @@ func init() {
 	initConfigFiles(ko.Strings("config"), ko)
 
 	// Load environment variables and merge into the loaded config.
+	// LISTMONK_foo__bar -> foo.bar (double underscore becomes dot for nested config)
+	// LISTMONK_static_dir -> static-dir (top-level keys with underscore become hyphen for CLI flags)
 	if err := ko.Load(env.Provider("LISTMONK_", ".", func(s string) string {
-		return strings.Replace(strings.ToLower(strings.TrimPrefix(s, "LISTMONK_")), "__", ".", -1)
+		key := strings.ToLower(strings.TrimPrefix(s, "LISTMONK_"))
+		key = strings.Replace(key, "__", ".", -1)
+		// Only convert underscore to hyphen for top-level keys (CLI flags like static-dir, i18n-dir)
+		// Nested config keys (containing dots) keep underscores (e.g., db.ssl_mode)
+		if !strings.Contains(key, ".") {
+			key = strings.Replace(key, "_", "-", -1)
+		}
+		return key
 	}), nil); err != nil {
 		lo.Fatalf("error loading config from env: %v", err)
 	}
@@ -140,6 +149,9 @@ func init() {
 		os.Exit(0)
 	}
 
+	// Is this a nightly build?
+	isNightly := strings.Contains(versionString, "nightly")
+
 	// Check if the DB schema is installed.
 	if ok, err := checkSchema(db); err != nil {
 		log.Fatalf("error checking schema in DB: %v", err)
@@ -148,12 +160,23 @@ func init() {
 	}
 
 	if ko.Bool("upgrade") {
-		upgrade(db, fs, !ko.Bool("yes"))
+		// Even on explicit upgrade runs, for nightly builds, do not record the last
+		// migration version in the DB.
+		lo.Printf("running upgrade...")
+		upgrade(db, fs, !ko.Bool("yes"), !isNightly)
 		os.Exit(0)
 	}
 
-	// Before the queries are prepared, see if there are pending upgrades.
-	checkUpgrade(db)
+	// For nightly builds, always auto-run pending migrations without
+	// recording the last version in the DB. Migrations are idempotent, and between
+	// nightly releases, they may change multiple times.
+	if isNightly {
+		lo.Printf("auto-running all migrations for nightly %s since last major version", versionString)
+		upgrade(db, fs, false, false)
+	} else {
+		// Before the queries are prepared, see if there are pending upgrades.
+		checkUpgrade(db)
+	}
 
 	// Read the SQL queries from the queries file.
 	qMap := readQueries(queryFilePath, fs)
@@ -232,9 +255,7 @@ func main() {
 	}
 
 	// Start cronjobs.
-	if ko.Bool("app.cache_slow_queries") {
-		initCron(core)
-	}
+	initCron(core, db)
 
 	// Start the campaign manager workers. The campaign batches (fetch from DB, push out
 	// messages) get processed at the specified interval.

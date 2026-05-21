@@ -192,12 +192,21 @@ export default {
         content_style: `
           body { font-family: 'Inter', sans-serif; font-size: 15px; }
           img { max-width: 100%; }
+          img.img-float-left { float: left; margin: 0 1em 1em 0; }
+          img.img-float-right { float: right; margin: 0 0 1em 1em; }
           a { color: ${colors.primary}; }
           table, td { border-color: #ccc;}
         `,
 
         language: LANGS[lang] || null,
         language_url: LANGS[lang] ? `${uris.static}/tinymce/lang/${LANGS[lang]}.js` : null,
+
+        image_advtab: true,
+        image_class_list: [
+          { title: 'None', value: '' },
+          { title: 'Float left', value: 'img-float-left' },
+          { title: 'Float right', value: 'img-float-right' },
+        ],
 
         file_picker_types: 'image',
         file_picker_callback: (callback) => {
@@ -211,7 +220,7 @@ export default {
 
     onEditorURLConvert(url) {
       let u = url;
-      if (this.isTrackLink) {
+      if (this.isTrackLink && /^https?:\/\//i.test(u)) {
         u = `${u}@TrackLink`;
       }
 
@@ -264,14 +273,21 @@ export default {
 
         // If an existing link is being edited, check for the tracking flag `@TrackLink` at the end
         // of the url. Remove that from the URL and instead check the checkbox.
-        let checked = false;
-        if (!t.initialData.link !== '') {
+        // Default to the last user choice (stored in localStorage), or false if not set.
+        let checked = JSON.parse(localStorage.getItem('trackLink') || 'false');
+
+        // Check if this is an existing link being edited
+        if (t.initialData.url && t.initialData.url.value && t.initialData.url.value !== '') {
           const t2 = t;
           const url = t2.initialData.url.value.replace(/@TrackLink$/, '');
 
           if (t2.initialData.url.value !== url) {
+            // Link has @TrackLink suffix - keep it checked
             t2.initialData.url.value = url;
             checked = true;
+          } else {
+            // Link doesn't have @TrackLink suffix - uncheck it
+            checked = false;
           }
         }
 
@@ -286,12 +302,17 @@ export default {
 
           if (checked) {
             c.setAttribute('checked', checked);
+            // CRITICAL FIX: Sync the Vue instance state with the checkbox state
+            // This ensures that when the checkbox appears checked, the tracking
+            // will actually work when the user saves without manually toggling.
+            self.isTrackLink = true;
           }
 
           // Store the checkbox's state in the Vue instance to pick up from
           // the TinyMCE link conversion callback.
           c.onchange = (e) => {
             self.isTrackLink = e.target.checked;
+            localStorage.setItem('trackLink', JSON.stringify(e.target.checked));
           };
 
           const l = document.createElement('label');

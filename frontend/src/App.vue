@@ -13,7 +13,14 @@
         <navigation v-if="isMobile" :is-mobile="isMobile" :active-item="activeItem" :active-group="activeGroup"
           @toggleGroup="toggleGroup" @doLogout="doLogout" />
 
-        <b-navbar-dropdown class="user" tag="div" right v-else>
+        <b-navbar-item tag="a" href="#" @click.prevent="emitPageRefresh" data-cy="btn-refresh"
+          :aria-label="$t('globals.buttons.refresh')">
+          <b-tooltip :label="$t('globals.buttons.refresh')" type="is-dark" position="is-bottom">
+            <b-icon icon="refresh" /> <span class="is-hidden-tablet">{{ $t('globals.buttons.refresh') }}</span>
+          </b-tooltip>
+        </b-navbar-item>
+
+        <b-navbar-dropdown class="user" tag="div" right>
           <template v-if="profile.username" #label>
             <span class="user-avatar">
               <img v-if="profile.avatar" :src="profile.avatar" alt="" />
@@ -144,6 +151,10 @@ export default Vue.extend({
       this.activeGroup = state ? { [group]: true } : {};
     },
 
+    emitPageRefresh() {
+      this.$root.$emit('page.refresh');
+    },
+
     reloadApp() {
       this.$api.reloadApp().then(() => {
         this.$utils.toast('Reloading app ...');
@@ -191,8 +202,8 @@ export default Vue.extend({
       return (this.serverConfig.needs_restart
         || this.serverConfig.has_legacy_user
         || (this.serverConfig.update
-        && this.serverConfig.update.messages
-        && this.serverConfig.update.messages.length > 0));
+          && this.serverConfig.update.messages
+          && this.serverConfig.update.messages.length > 0));
     },
 
     version() {
@@ -207,7 +218,7 @@ export default Vue.extend({
   mounted() {
     // Lists is required across different views. On app load, fetch the lists
     // and have them in the store.
-    this.$api.getLists({ minimal: true, per_page: 'all' });
+    this.$api.getLists({ minimal: true, per_page: 'all', status: 'active' });
 
     window.addEventListener('resize', () => {
       this.windowWidth = window.innerWidth;

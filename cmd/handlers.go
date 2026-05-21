@@ -40,6 +40,14 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 		e.DefaultHTTPErrorHandler(err, c)
 	}
 
+	// Configure CORS middleware if domains are configured.
+	if len(a.cfg.Security.CorsOrigins) > 0 {
+		e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+			AllowOrigins: a.cfg.Security.CorsOrigins,
+			AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
+		}))
+	}
+
 	// =================================================================
 	// Authenticated non /api handlers.
 	{
@@ -99,6 +107,7 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 
 		g.GET("/api/settings", pm(a.GetSettings, "settings:get"))
 		g.PUT("/api/settings", pm(a.UpdateSettings, "settings:manage"))
+		g.PUT("/api/settings/:key", pm(a.UpdateSettingsByKey, "settings:manage"))
 		g.POST("/api/settings/smtp/test", pm(a.TestSMTPSettings, "settings:manage"))
 		g.POST("/api/admin/reload", pm(a.ReloadApp, "settings:manage"))
 		g.GET("/api/logs", pm(a.GetLogs, "settings:get"))
@@ -107,11 +116,13 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 
 		g.GET("/api/subscribers", pm(a.QuerySubscribers, "subscribers:get_all", "subscribers:get"))
 		g.GET("/api/subscribers/:id", pm(hasID(a.GetSubscriber), "subscribers:get_all", "subscribers:get"))
+		g.GET("/api/subscribers/:id/activity", pm(hasID(a.GetSubscriberActivity), "subscribers:get_all", "subscribers:get"))
 		g.GET("/api/subscribers/:id/export", pm(hasID(a.ExportSubscriberData), "subscribers:get_all", "subscribers:get"))
 		g.GET("/api/subscribers/:id/bounces", pm(hasID(a.GetSubscriberBounces), "bounces:get"))
 		g.DELETE("/api/subscribers/:id/bounces", pm(hasID(a.DeleteSubscriberBounces), "bounces:manage"))
 		g.POST("/api/subscribers", pm(a.CreateSubscriber, "subscribers:manage"))
 		g.PUT("/api/subscribers/:id", pm(hasID(a.UpdateSubscriber), "subscribers:manage"))
+		g.PATCH("/api/subscribers/:id", pm(hasID(a.PatchSubscriber), "subscribers:manage"))
 		g.POST("/api/subscribers/:id/optin", pm(hasID(a.SubscriberSendOptin), "subscribers:manage"))
 		g.PUT("/api/subscribers/blocklist", pm(a.BlocklistSubscribers, "subscribers:manage"))
 		g.PUT("/api/subscribers/:id/blocklist", pm(hasID(a.BlocklistSubscriber), "subscribers:manage"))
@@ -144,7 +155,8 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 		g.GET("/api/lists/:id", hasID(a.GetList))
 		g.POST("/api/lists", pm(a.CreateList, "lists:manage_all"))
 		g.PUT("/api/lists/:id", hasID(a.UpdateList))
-		g.DELETE("/api/lists/:id", hasID(a.DeleteLists))
+		g.DELETE("/api/lists", a.DeleteLists)
+		g.DELETE("/api/lists/:id", hasID(a.DeleteList))
 
 		g.GET("/api/campaigns", pm(a.GetCampaigns, "campaigns:get_all", "campaigns:get"))
 		g.GET("/api/campaigns/running/stats", pm(a.GetRunningCampaignStats, "campaigns:get_all", "campaigns:get"))
@@ -158,8 +170,9 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 		g.POST("/api/campaigns/:id/test", pm(hasID(a.TestCampaign), "campaigns:manage_all", "campaigns:manage"))
 		g.POST("/api/campaigns", pm(a.CreateCampaign, "campaigns:manage_all", "campaigns:manage"))
 		g.PUT("/api/campaigns/:id", pm(hasID(a.UpdateCampaign), "campaigns:manage_all", "campaigns:manage"))
-		g.PUT("/api/campaigns/:id/status", pm(hasID(a.UpdateCampaignStatus), "campaigns:manage_all", "campaigns:manage"))
+		g.PUT("/api/campaigns/:id/status", pm(hasID(a.UpdateCampaignStatus), "campaigns:send"))
 		g.PUT("/api/campaigns/:id/archive", pm(hasID(a.UpdateCampaignArchive), "campaigns:manage_all", "campaigns:manage"))
+		g.DELETE("/api/campaigns", pm(a.DeleteCampaigns, "campaigns:manage", "campaigns:manage_all"))
 		g.DELETE("/api/campaigns/:id", pm(hasID(a.DeleteCampaign), "campaigns:manage_all", "campaigns:manage"))
 
 		g.GET("/api/media", pm(a.GetAllMedia, "media:get"))
@@ -178,6 +191,7 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 
 		g.DELETE("/api/maintenance/subscribers/:type", pm(a.GCSubscribers, "settings:maintain"))
 		g.DELETE("/api/maintenance/analytics/:type", pm(a.GCCampaignAnalytics, "settings:maintain"))
+		g.GET("/api/maintenance/analytics/:type/export", pm(a.ExportCampaignAnalytics, "settings:maintain"))
 		g.DELETE("/api/maintenance/subscriptions/unconfirmed", pm(a.GCSubscriptions, "settings:maintain"))
 
 		g.POST("/api/tx", pm(a.SendTxMessage, "tx:send"))
@@ -191,6 +205,11 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 		g.DELETE("/api/users", pm(a.DeleteUsers, "users:manage"))
 		g.DELETE("/api/users/:id", pm(hasID(a.DeleteUser), "users:manage"))
 		g.POST("/api/logout", a.Logout)
+
+		// TOTP 2FA endpoints
+		g.GET("/api/users/:id/twofa/totp", hasID(a.GenerateTOTPQR))
+		g.PUT("/api/users/:id/twofa", hasID(a.EnableTOTP))
+		g.DELETE("/api/users/:id/twofa", hasID(a.DisableTOTP))
 
 		g.GET("/api/roles/users", pm(a.GetUserRoles, "roles:get"))
 		g.GET("/api/roles/lists", pm(a.GeListRoles, "roles:get"))
@@ -222,9 +241,15 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 			return c.Render(http.StatusOK, "home", publicTpl{Title: "listmonk"})
 		})
 
-		// Public admin endpoints (login page, OIDC endpoints).
+		// Public admin endpoints (login page, OIDC endpoints, password reset).
 		g.GET(path.Join(uriAdmin, "/login"), a.LoginPage)
 		g.POST(path.Join(uriAdmin, "/login"), a.LoginPage)
+		g.GET(path.Join(uriAdmin, "/login/twofa"), a.TwofaPage)
+		g.POST(path.Join(uriAdmin, "/login/twofa"), a.TwofaPage)
+		g.GET(path.Join(uriAdmin, "/forgot"), a.ForgotPage)
+		g.POST(path.Join(uriAdmin, "/forgot"), a.ForgotPage)
+		g.GET(path.Join(uriAdmin, "/reset"), a.ResetPage)
+		g.POST(path.Join(uriAdmin, "/reset"), a.ResetPage)
 
 		if a.cfg.Security.OIDC.Enabled {
 			g.POST("/auth/oidc", a.OIDCLogin)

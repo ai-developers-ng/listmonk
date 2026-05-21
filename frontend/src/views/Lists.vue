@@ -2,10 +2,20 @@
   <section class="lists">
     <header class="columns page-header">
       <div class="column is-10">
-        <h1 class="title is-4">
+        <h1 class="title is-4 mb-2">
           {{ $t('globals.terms.lists') }}
+          <span v-if="queryParams.status === 'archived'" class="has-text-grey-light">/ {{ queryParams.status }} </span>
           <span v-if="!isNaN(lists.total)">({{ lists.total }})</span>
         </h1>
+
+        <div class="is-size-7">
+          <router-link v-if="queryParams.status !== 'archived'" :to="{ name: 'lists', query: { status: 'archived' } }">
+            {{ $t('globals.buttons.view') }} {{ $t('lists.archived').toLowerCase() }} &rarr;
+          </router-link>
+          <router-link v-else :to="{ name: 'lists' }">
+            {{ $t('globals.buttons.view') }} {{ $t('menu.allLists').toLowerCase() }} &rarr;
+          </router-link>
+        </div>
       </div>
       <div class="column has-text-right">
         <b-field v-if="$can('lists:manage_all')" expanded>
@@ -16,24 +26,36 @@
       </div>
     </header>
 
-    <b-table :data="lists.results" :loading="loading.listsFull" hoverable default-sort="createdAt" paginated
-      backend-pagination pagination-position="both" @page-change="onPageChange" :current-page="queryParams.page"
-      :per-page="lists.perPage" :total="lists.total" backend-sorting @sort="onSort">
+    <b-table :data="lists.results" :loading="loading.listsFull" @check-all="onTableCheck" @check="onTableCheck"
+      :checked-rows.sync="bulk.checked" hoverable default-sort="createdAt" paginated backend-pagination
+      pagination-position="both" @page-change="onPageChange" :current-page="queryParams.page" :per-page="lists.perPage"
+      :total="lists.total" checkable backend-sorting @sort="onSort">
       <template #top-left>
         <div class="columns">
           <div class="column is-6">
             <form @submit.prevent="getLists">
-              <div>
-                <b-field>
-                  <b-input v-model="queryParams.query" name="query" expanded icon="magnify" ref="query"
-                    data-cy="query" />
-                  <p class="controls">
-                    <b-button native-type="submit" type="is-primary" icon-left="magnify" data-cy="btn-query" />
-                  </p>
-                </b-field>
-              </div>
+              <b-field>
+                <b-input v-model="queryParams.query" name="query" expanded icon="magnify" ref="query" data-cy="query" />
+                <p class="controls">
+                  <b-button native-type="submit" type="is-primary" icon-left="magnify" data-cy="btn-query" />
+                </p>
+              </b-field>
             </form>
           </div>
+        </div>
+        <div class="actions" v-if="bulk.checked.length > 0">
+          <a class="a" href="#" @click.prevent="deleteLists" data-cy="btn-delete-lists">
+            <b-icon icon="trash-can-outline" size="is-small" /> {{ $t('globals.buttons.delete') }}
+          </a>
+          <span class="a">
+            {{ $tc('globals.messages.numSelected', numSelectedLists, { num: numSelectedLists }) }}
+            <span v-if="!bulk.all && lists.total > lists.perPage">
+              &mdash;
+              <a href="#" @click.prevent="onSelectAll" data-cy="select-all-lists">
+                {{ $tc('globals.messages.selectAll', lists.total, { num: lists.total }) }}
+              </a>
+            </span>
+          </span>
         </div>
       </template>
 
@@ -126,7 +148,7 @@
             </b-tooltip>
           </a>
 
-          <router-link v-if="$can('lists:import')" :to="{ name: 'import', query: { list_id: props.row.id } }"
+          <router-link v-if="$can('subscribers:import')" :to="{ name: 'import', query: { list_id: props.row.id } }"
             data-cy="btn-import">
             <b-tooltip :label="$t('import.title')" type="is-dark">
               <b-icon icon="file-upload-outline" size="is-small" />
@@ -186,6 +208,13 @@ export default Vue.extend({
         query: '',
         orderBy: 'id',
         order: 'asc',
+        status: this.$route.query.status || 'active',
+      },
+
+      // Table bulk row selection states.
+      bulk: {
+        checked: [],
+        all: false,
       },
     };
   },
@@ -241,13 +270,14 @@ export default Vue.extend({
         query: this.queryParams.query.replace(/[^\p{L}\p{N}\s]/gu, ' '),
         order_by: this.queryParams.orderBy,
         order: this.queryParams.order,
+        status: this.queryParams.status,
       }).then((resp) => {
         this.lists = resp;
       });
 
       // Also fetch the minimal lists for the global store that appears
       // in dropdown menus on other pages like import and campaigns.
-      this.$api.getLists({ minimal: true, per_page: 'all' });
+      this.$api.getLists({ minimal: true, per_page: 'all', status: 'active' });
     },
 
     deleteList(list) {
@@ -261,6 +291,50 @@ export default Vue.extend({
           });
         },
       );
+    },
+
+    // Mark all lists in the query as selected.
+    onSelectAll() {
+      this.bulk.all = true;
+    },
+
+    onTableCheck() {
+      // Disable bulk.all selection if there are no rows checked in the table.
+      if (this.bulk.checked.length !== this.lists.total) {
+        this.bulk.all = false;
+      }
+    },
+
+    deleteLists() {
+      const name = this.$tc('globals.terms.list', this.numSelectedCampaigns);
+
+      const fn = () => {
+        const params = {};
+        if (!this.bulk.all && this.bulk.checked.length > 0) {
+          // If 'all' is not selected, delete lists by IDs.
+          params.id = this.bulk.checked.map((l) => l.id);
+        } else {
+          // 'All' is selected, delete by query.
+          params.query = this.queryParams.query.replace(/[^\p{L}\p{N}\s]/gu, ' ');
+          params.all = this.bulk.all;
+        }
+
+        this.$api.deleteLists(params)
+          .then(() => {
+            this.getLists();
+            this.$utils.toast(this.$tc(
+              'globals.messages.deletedCount',
+              this.numSelectedLists,
+              { num: this.numSelectedLists, name },
+            ));
+          });
+      };
+
+      this.$utils.confirm(this.$tc(
+        'globals.messages.confirmDelete',
+        this.numSelectedLists,
+        { num: this.numSelectedLists, name: name.toLowerCase() },
+      ), fn);
     },
 
     createOptinCampaign(list) {
@@ -283,6 +357,18 @@ export default Vue.extend({
 
   computed: {
     ...mapState(['loading', 'settings']),
+
+    numSelectedLists() {
+      return this.bulk.all ? this.lists.total : this.bulk.checked.length;
+    },
+  },
+
+  created() {
+    this.$root.$on('page.refresh', this.getLists);
+  },
+
+  destroyed() {
+    this.$root.$off('page.refresh', this.getLists);
   },
 
   mounted() {

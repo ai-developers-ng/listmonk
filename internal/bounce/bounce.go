@@ -35,6 +35,10 @@ type Opt struct {
 		Enabled bool
 		Key     string
 	}
+	Lettermint struct {
+		Enabled bool
+		Key     string
+	}
 
 	RecordBounceCB func(models.Bounce) error
 }
@@ -47,6 +51,7 @@ type Manager struct {
 	Sendgrid     *webhooks.Sendgrid
 	Postmark     *webhooks.Postmark
 	Forwardemail *webhooks.Forwardemail
+	Lettermint   *webhooks.Lettermint
 	queries      *Queries
 	opt          Opt
 	log          *log.Logger
@@ -71,7 +76,7 @@ func New(opt Opt, q *Queries, lo *log.Logger) (*Manager, error) {
 	if opt.MailboxEnabled {
 		switch opt.MailboxType {
 		case "pop":
-			m.mailbox = mailbox.NewPOP(opt.Mailbox)
+			m.mailbox = mailbox.NewPOP(opt.Mailbox, lo)
 		default:
 			return nil, errors.New("unknown bounce mailbox type")
 		}
@@ -99,6 +104,10 @@ func New(opt Opt, q *Queries, lo *log.Logger) (*Manager, error) {
 			fe := webhooks.NewForwardemail([]byte(opt.ForwardEmail.Key))
 			m.Forwardemail = fe
 		}
+
+		if opt.Lettermint.Enabled {
+			m.Lettermint = webhooks.NewLettermint([]byte(opt.Lettermint.Key))
+		}
 	}
 
 	return m, nil
@@ -125,6 +134,7 @@ func (m *Manager) Run() {
 // runMailboxScanner runs a blocking loop that scans the mailbox at given intervals.
 func (m *Manager) runMailboxScanner() {
 	for {
+		m.log.Printf("scanning bounce mailbox %s", m.opt.Mailbox.Host)
 		if err := m.mailbox.Scan(1000, m.queue); err != nil {
 			m.log.Printf("error scanning bounce mailbox: %v", err)
 		}

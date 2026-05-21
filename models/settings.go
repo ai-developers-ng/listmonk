@@ -29,6 +29,7 @@ type Settings struct {
 	AppMessageSlidingWindowRate     int    `json:"app.message_sliding_window_rate"`
 
 	PrivacyIndividualTracking bool     `json:"privacy.individual_tracking"`
+	PrivacyDisableTracking    bool     `json:"privacy.disable_tracking"`
 	PrivacyUnsubHeader        bool     `json:"privacy.unsubscribe_header"`
 	PrivacyAllowBlocklist     bool     `json:"privacy.allow_blocklist"`
 	PrivacyAllowPreferences   bool     `json:"privacy.allow_preferences"`
@@ -62,6 +63,8 @@ type Settings struct {
 		DefaultListRoleID null.Int `json:"default_list_role_id"`
 	} `json:"security.oidc"`
 
+	SecurityCORSOrigins []string `json:"security.cors_origins"`
+
 	UploadProvider             string   `json:"upload.provider"`
 	UploadExtensions           []string `json:"upload.extensions"`
 	UploadFilesystemUploadPath string   `json:"upload.filesystem.upload_path"`
@@ -78,22 +81,23 @@ type Settings struct {
 	UploadS3Expiry             string   `json:"upload.s3.expiry"`
 
 	SMTP []struct {
-		Name          string              `json:"name"`
-		UUID          string              `json:"uuid"`
-		Enabled       bool                `json:"enabled"`
-		Host          string              `json:"host"`
-		HelloHostname string              `json:"hello_hostname"`
-		Port          int                 `json:"port"`
-		AuthProtocol  string              `json:"auth_protocol"`
-		Username      string              `json:"username"`
-		Password      string              `json:"password,omitempty"`
-		EmailHeaders  []map[string]string `json:"email_headers"`
-		MaxConns      int                 `json:"max_conns"`
-		MaxMsgRetries int                 `json:"max_msg_retries"`
-		IdleTimeout   string              `json:"idle_timeout"`
-		WaitTimeout   string              `json:"wait_timeout"`
-		TLSType       string              `json:"tls_type"`
-		TLSSkipVerify bool                `json:"tls_skip_verify"`
+		Name              string              `json:"name"`
+		UUID              string              `json:"uuid"`
+		Enabled           bool                `json:"enabled"`
+		Host              string              `json:"host"`
+		HelloHostname     string              `json:"hello_hostname"`
+		Port              int                 `json:"port"`
+		AuthProtocol      string              `json:"auth_protocol"`
+		Username          string              `json:"username"`
+		Password          string              `json:"password,omitempty"`
+		EmailHeaders      []map[string]string `json:"email_headers"`
+		MaxConns          int                 `json:"max_conns"`
+		MaxMsgRetries     int                 `json:"max_msg_retries"`
+		MsgRetryDelay     string              `json:"msg_retry_delay"`
+		IdleTimeout       string              `json:"idle_timeout"`
+		WaitTimeout       string              `json:"wait_timeout"`
+		TLSType           string              `json:"tls_type"`
+		TLSSkipVerify     bool                `json:"tls_skip_verify"`
 	} `json:"smtp"`
 
 	Messengers []struct {
@@ -126,6 +130,10 @@ type Settings struct {
 		Enabled bool   `json:"enabled"`
 		Key     string `json:"key"`
 	} `json:"bounce.forwardemail"`
+	BounceLettermint struct {
+		Enabled bool   `json:"enabled"`
+		Key     string `json:"key"`
+	} `json:"bounce.lettermint"`
 	BounceBoxes []struct {
 		UUID          string `json:"uuid"`
 		Enabled       bool   `json:"enabled"`
@@ -140,6 +148,11 @@ type Settings struct {
 		TLSSkipVerify bool   `json:"tls_skip_verify"`
 		ScanInterval  string `json:"scan_interval"`
 	} `json:"bounce.mailboxes"`
+
+	MaintenanceDB struct {
+		Vacuum         bool   `json:"vacuum"`
+		VacuumInterval string `json:"vacuum_cron_interval"`
+	} `json:"maintenance.db"`
 
 	AdminCustomCSS  string `json:"appearance.admin.custom_css"`
 	AdminCustomJS   string `json:"appearance.admin.custom_js"`

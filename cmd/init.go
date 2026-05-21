@@ -8,13 +8,16 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
+	"log/slog"
 	"maps"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -54,8 +57,10 @@ import (
 )
 
 const (
-	queryFilePath = "queries.sql"
-	emailMsgr     = "email"
+	// Path to the SQL queries directory in the embedded FS.
+	queryFilePath = "/queries"
+
+	emailMsgr = "email"
 )
 
 // UrlConfig contains various URL constants used in the app.
@@ -84,6 +89,7 @@ type Config struct {
 	DBBatchSize                   int      `koanf:"batch_size"`
 	Privacy                       struct {
 		IndividualTracking bool            `koanf:"individual_tracking"`
+		DisableTracking    bool            `koanf:"disable_tracking"`
 		AllowPreferences   bool            `koanf:"allow_preferences"`
 		AllowBlocklist     bool            `koanf:"allow_blocklist"`
 		AllowExport        bool            `koanf:"allow_export"`
@@ -117,6 +123,8 @@ type Config struct {
 				Secret  string `koanf:"secret"`
 			} `koanf:"hcaptcha"`
 		} `koanf:"captcha"`
+
+		CorsOrigins []string `koanf:"cors_origins"`
 	} `koanf:"security"`
 
 	Appearance struct {
@@ -139,6 +147,7 @@ type Config struct {
 	BounceSendgridEnabled     bool
 	BouncePostmarkEnabled     bool
 	BounceForwardemailEnabled bool
+	BounceLettermintEnabled   bool
 
 	PermissionsRaw json.RawMessage
 	Permissions    map[string]struct{}
@@ -160,7 +169,7 @@ func initFlags(ko *koanf.Koanf) {
 	f.Bool("idempotent", false, "make --install run only if the database isn't already setup")
 	f.Bool("upgrade", false, "upgrade database to the current version")
 	f.Bool("version", false, "show current version of the build")
-	f.Bool("new-config", false, "generate sample config file")
+	f.Bool("new-config", false, "generate sample config file (at path given in --config)")
 	f.String("static-dir", "", "(optional) path to directory with static files")
 	f.String("i18n-dir", "", "(optional) path to directory with i18n language files")
 	f.Bool("yes", false, "assume 'yes' to prompts during --install/upgrade")
@@ -197,7 +206,7 @@ func initFS(appDir, frontendDir, staticDir, i18nDir string) stuffbin.FileSystem 
 		// These paths are joined with appDir.
 		appFiles = []string{
 			"./config.toml.sample:config.toml.sample",
-			"./queries.sql:queries.sql",
+			"./queries:queries",
 			"./schema.sql:schema.sql",
 			"./permissions.json:permissions.json",
 		}
@@ -318,8 +327,34 @@ func initDB() *sqlx.DB {
 	}
 
 	lo.Printf("connecting to db: %s:%d/%s", c.Host, c.Port, c.DBName)
-	db, err := sqlx.Connect("postgres",
-		fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s %s", c.Host, c.Port, c.User, c.Password, c.DBName, c.SSLMode, c.Params))
+
+	// Build Postgres DSN conditionally with non-empty fields.
+	fields := map[string]string{
+		"host":     c.Host,
+		"port":     strconv.Itoa(c.Port),
+		"user":     c.User,
+		"password": c.Password,
+		"dbname":   c.DBName,
+		"sslmode":  c.SSLMode,
+	}
+	if c.Port == 0 {
+		delete(fields, "port")
+	}
+
+	var parts []string
+	for k, v := range fields {
+		if v == "" {
+			continue
+		}
+
+		parts = append(parts, k+"="+v)
+	}
+
+	if c.Params != "" {
+		parts = append(parts, c.Params)
+	}
+
+	db, err := sqlx.Connect("postgres", strings.Join(parts, " "))
 	if err != nil {
 		lo.Fatalf("error connecting to DB: %v", err)
 	}
@@ -331,19 +366,35 @@ func initDB() *sqlx.DB {
 	return db.Unsafe()
 }
 
-// readQueries reads named SQL queries from the SQL queries file into a query map.
-func readQueries(sqlFile string, fs stuffbin.FileSystem) goyesql.Queries {
-	// Load SQL queries.
-	qB, err := fs.Read(sqlFile)
+func readQueries(dir string, fs stuffbin.FileSystem) goyesql.Queries {
+	out := goyesql.Queries{}
+
+	// Glob all the .sql files in the queries directory.
+	qPath := path.Join(dir, "/*.sql")
+	files, err := fs.Glob(qPath)
 	if err != nil {
-		lo.Fatalf("error reading SQL file %s: %v", sqlFile, err)
-	}
-	qMap, err := goyesql.ParseBytes(qB)
-	if err != nil {
-		lo.Fatalf("error parsing SQL queries: %v", err)
+		lo.Fatalf("error reading *.sql query files from %s: %v", qPath, err)
 	}
 
-	return qMap
+	// Read and merge queries from all files into one map.
+	for _, file := range files {
+		// Read the SQL file.
+		b, err := fs.Read(file)
+		if err != nil {
+			lo.Fatalf("error reading SQL file %s: %v", file, err)
+		}
+
+		// Parse queries in it into a map.
+		mp, err := goyesql.ParseBytes(b)
+		if err != nil {
+			lo.Fatalf("error parsing SQL queries: %v", err)
+		}
+
+		// Merge into the main query map.
+		maps.Copy(out, mp)
+	}
+
+	return out
 }
 
 // prepareQueries queries prepares a query map and returns a *Queries
@@ -462,6 +513,7 @@ func initConstConfig(ko *koanf.Koanf) *Config {
 	c.BounceSendgridEnabled = ko.Bool("bounce.sendgrid_enabled")
 	c.BouncePostmarkEnabled = ko.Bool("bounce.postmark.enabled")
 	c.BounceForwardemailEnabled = ko.Bool("bounce.forwardemail.enabled")
+	c.BounceLettermintEnabled = ko.Bool("bounce.lettermint.enabled")
 	c.HasLegacyUser = ko.Exists("app.admin_username") || ko.Exists("app.admin_password")
 
 	b := md5.Sum([]byte(time.Now().String()))
@@ -545,6 +597,7 @@ func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, u *UrlCon
 		MaxSendErrors:         ko.Int("app.max_send_errors"),
 		FromEmail:             ko.String("app.from_email"),
 		IndividualTracking:    ko.Bool("privacy.individual_tracking"),
+		DisableTracking:       ko.Bool("privacy.disable_tracking"),
 		UnsubURL:              u.UnsubURL,
 		OptinURL:              u.OptinURL,
 		LinkTrackURL:          u.LinkTrackURL,
@@ -700,6 +753,7 @@ func initMediaStore(ko *koanf.Koanf) media.Store {
 	case "s3":
 		var o s3.Opt
 		ko.Unmarshal("upload.s3", &o)
+		o.RootURL = ko.String("app.root_url")
 
 		up, err := s3.NewS3Store(o)
 		if err != nil {
@@ -783,6 +837,13 @@ func initBounceManager(cb func(models.Bounce) error, stmt *sqlx.Stmt, lo *log.Lo
 		}{
 			ko.Bool("bounce.forwardemail.enabled"),
 			ko.String("bounce.forwardemail.key"),
+		},
+		Lettermint: struct {
+			Enabled bool
+			Key     string
+		}{
+			ko.Bool("bounce.lettermint.enabled"),
+			ko.String("bounce.lettermint.key"),
 		},
 		RecordBounceCB: cb,
 	}
@@ -890,8 +951,16 @@ func initHTTPServer(cfg *Config, urlCfg *UrlConfig, i *i18n.I18n, fs stuffbin.Fi
 	srv.GET("/admin/static/*", echo.WrapHandler(fSrv))
 
 	// Public (subscriber) facing media upload files.
-	if ko.String("upload.provider") == "filesystem" && ko.String("upload.filesystem.upload_uri") != "" {
-		srv.Static(ko.String("upload.filesystem.upload_uri"), ko.String("upload.filesystem.upload_path"))
+	var (
+		uploadProvider = ko.String("upload.provider")
+		uploadFsURI    = ko.String("upload.filesystem.upload_uri")
+		publicURL      = ko.String("upload.s3.public_url")
+	)
+	switch {
+	case uploadProvider == "filesystem" && uploadFsURI != "":
+		srv.Static(uploadFsURI, ko.String("upload.filesystem.upload_path"))
+	case uploadProvider == "s3" && strings.HasPrefix(publicURL, "/"):
+		srv.GET(path.Join(publicURL, "/:filepath"), app.ServeS3Media)
 	}
 
 	// Register all HTTP handlers.
@@ -917,31 +986,53 @@ func initCaptcha() *captcha.Captcha {
 	if err := ko.Unmarshal("security.captcha", &opt); err != nil {
 		lo.Fatalf("error loading captcha config: %v", err)
 	}
-	
+
 	return captcha.New(opt)
 }
 
-// initCron initializes the cron job for refreshing slow query cache.
-func initCron(co *core.Core) {
-	intval := ko.String("app.cache_slow_queries_interval")
-	if intval == "" {
-		lo.Println("error: invalid cron interval string")
-		return
+// initCron initializes cron jobs for slow query cache refresh and database vacuum.
+func initCron(co *core.Core, db *sqlx.DB) {
+	c := cron.New(cron.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
+
+	// Slow query cache cron job.
+	if ko.Bool("app.cache_slow_queries") {
+		intval := ko.String("app.cache_slow_queries_interval")
+		if intval == "" {
+			lo.Println("error: invalid cron interval string for slow query cache")
+		} else {
+			_, err := c.Add(intval, func() {
+				lo.Println("refreshing slow query cache")
+				_ = co.RefreshMatViews(true)
+				lo.Println("done refreshing slow query cache")
+			})
+			if err != nil {
+				lo.Printf("error initializing slow cache query cron: %v", err)
+			} else {
+				lo.Printf("IMPORTANT: database slow query caching is enabled. Aggregate numbers and stats will not be realtime. Next refresh at: %v", c.Entries()[len(c.Entries())-1].Next)
+			}
+		}
 	}
 
-	c := cron.New()
-	_, err := c.Add(intval, func() {
-		lo.Println("refreshing slow query cache")
-		_ = co.RefreshMatViews(true)
-		lo.Println("done refreshing slow query cache")
-	})
-	if err != nil {
-		lo.Printf("error initializing slow cache query cron: %v", err)
-		return
+	// Database vacuum cron job.
+	if ko.Bool("maintenance.db.vacuum") {
+		intval := ko.String("maintenance.db.vacuum_cron_interval")
+		if intval == "" {
+			lo.Println("error: invalid cron interval string for database vacuum")
+		} else {
+			_, err := c.Add(intval, func() {
+				RunDBVacuum(db, lo)
+			})
+			if err != nil {
+				lo.Printf("error initializing database vacuum cron: %v", err)
+			} else {
+				lo.Printf("database VACUUM cron enabled at interval: %s", intval)
+			}
+		}
 	}
 
-	c.Start()
-	lo.Printf("IMPORTANT: database slow query caching is enabled. Aggregate numbers and stats will not be realtime. Next refresh at: %v", c.Entries()[0].Next)
+	if len(c.Entries()) > 0 {
+		c.Start()
+	}
 }
 
 // awaitReload waits for a SIGHUP signal to reload the app. Every setting change on the UI causes a reload.
@@ -1005,6 +1096,7 @@ func initTplFuncs(i *i18n.I18n, u *UrlConfig) template.FuncMap {
 	sprigFuncs := sprig.GenericFuncMap()
 	delete(sprigFuncs, "env")
 	delete(sprigFuncs, "expandenv")
+	delete(sprigFuncs, "getHostByName")
 
 	maps.Copy(funcs, sprigFuncs)
 
@@ -1038,6 +1130,7 @@ func initAuth(co *core.Core, db *sql.DB, ko *koanf.Koanf) (bool, *auth.Auth) {
 		},
 		SetCookie: func(cookie *http.Cookie, w any) error {
 			c := w.(echo.Context)
+			cookie.SameSite = http.SameSiteLaxMode
 			c.SetCookie(cookie)
 			return nil
 		},

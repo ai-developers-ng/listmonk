@@ -84,7 +84,6 @@ func New(cfg Config, db *sql.DB, cb *Callbacks, lo *log.Logger) (*Auth, error) {
 		apiUsers: map[string]User{},
 	}
 
-
 	// Initialize session manager.
 	a.sess = simplesessions.New(simplesessions.Options{
 		EnableAutoCreate: false,
@@ -381,6 +380,16 @@ func (o *Auth) SaveSession(u User, oidcToken string, c echo.Context) error {
 	}
 
 	return nil
+}
+
+// GetSessionID returns the current session ID from the echo context.
+func GetSessionID(c echo.Context) string {
+	sess, ok := c.Get(SessionKey).(*simplesessions.Session)
+	if !ok || sess == nil {
+		return ""
+	}
+
+	return sess.ID()
 }
 
 // validateSession checks if the cookie session is valid (in the DB) and returns the session and user details.

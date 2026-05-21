@@ -61,6 +61,9 @@ input[disabled] {
 .right {
   text-align: right;
 }
+.small {
+  font-size: 0.875em;
+}
 .error {
   color: #FF5722;
 }
@@ -196,10 +199,11 @@ input[disabled] {
     max-width: 24px;
     margin-right: 10px;
   }
-
-#btn-back {
-  display: none;
-}
+  .login input[name=totp_code] {
+    font-size: 2em;
+    letter-spacing: 5px;
+    text-align: center;
+  }
 
 footer.container {
   margin-top: 15px;

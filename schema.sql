@@ -1,5 +1,6 @@
 DROP TYPE IF EXISTS list_type CASCADE; CREATE TYPE list_type AS ENUM ('public', 'private', 'temporary');
 DROP TYPE IF EXISTS list_optin CASCADE; CREATE TYPE list_optin AS ENUM ('single', 'double');
+DROP TYPE IF EXISTS list_status CASCADE; CREATE TYPE list_status AS ENUM ('active', 'archived');
 DROP TYPE IF EXISTS subscriber_status CASCADE; CREATE TYPE subscriber_status AS ENUM ('enabled', 'disabled', 'blocklisted');
 DROP TYPE IF EXISTS subscription_status CASCADE; CREATE TYPE subscription_status AS ENUM ('unconfirmed', 'confirmed', 'unsubscribed');
 DROP TYPE IF EXISTS campaign_status CASCADE; CREATE TYPE campaign_status AS ENUM ('draft', 'running', 'scheduled', 'paused', 'cancelled', 'finished');
@@ -10,6 +11,7 @@ DROP TYPE IF EXISTS template_type CASCADE; CREATE TYPE template_type AS ENUM ('c
 DROP TYPE IF EXISTS user_type CASCADE; CREATE TYPE user_type AS ENUM ('user', 'api');
 DROP TYPE IF EXISTS user_status CASCADE; CREATE TYPE user_status AS ENUM ('enabled', 'disabled');
 DROP TYPE IF EXISTS role_type CASCADE; CREATE TYPE role_type AS ENUM ('user', 'list');
+DROP TYPE IF EXISTS twofa_type CASCADE; CREATE TYPE twofa_type AS ENUM ('none', 'totp');
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -40,6 +42,7 @@ CREATE TABLE lists (
     name            TEXT NOT NULL,
     type            list_type NOT NULL,
     optin           list_optin NOT NULL DEFAULT 'single',
+    status          list_status NOT NULL DEFAULT 'active',
     tags            VARCHAR(100)[],
     description     TEXT NOT NULL DEFAULT '',
 
@@ -48,6 +51,7 @@ CREATE TABLE lists (
 );
 DROP INDEX IF EXISTS idx_lists_type; CREATE INDEX idx_lists_type ON lists(type);
 DROP INDEX IF EXISTS idx_lists_optin; CREATE INDEX idx_lists_optin ON lists(optin);
+DROP INDEX IF EXISTS idx_lists_status; CREATE INDEX idx_lists_status ON lists(status);
 DROP INDEX IF EXISTS idx_lists_name; CREATE INDEX idx_lists_name ON lists(name);
 DROP INDEX IF EXISTS idx_lists_created_at; CREATE INDEX idx_lists_created_at ON lists(created_at);
 DROP INDEX IF EXISTS idx_lists_updated_at; CREATE INDEX idx_lists_updated_at ON lists(updated_at);
@@ -100,6 +104,7 @@ CREATE TABLE campaigns (
     content_type     content_type NOT NULL DEFAULT 'richtext',
     send_at          TIMESTAMP WITH TIME ZONE,
     headers          JSONB NOT NULL DEFAULT '[]',
+    attribs          JSONB NOT NULL DEFAULT '{}',
     status           campaign_status NOT NULL DEFAULT 'draft',
     tags             VARCHAR(100)[],
 
@@ -158,7 +163,7 @@ CREATE TABLE campaign_views (
 );
 DROP INDEX IF EXISTS idx_views_camp_id; CREATE INDEX idx_views_camp_id ON campaign_views(campaign_id);
 DROP INDEX IF EXISTS idx_views_subscriber_id; CREATE INDEX idx_views_subscriber_id ON campaign_views(subscriber_id);
-DROP INDEX IF EXISTS idx_views_date; CREATE INDEX idx_views_date ON campaign_views((TIMEZONE('UTC', created_at)::DATE));
+DROP INDEX IF EXISTS idx_views_date; CREATE INDEX idx_views_date ON campaign_views(created_at);
 
 -- media
 DROP TABLE IF EXISTS media CASCADE;
@@ -211,7 +216,7 @@ CREATE TABLE link_clicks (
 DROP INDEX IF EXISTS idx_clicks_camp_id; CREATE INDEX idx_clicks_camp_id ON link_clicks(campaign_id);
 DROP INDEX IF EXISTS idx_clicks_link_id; CREATE INDEX idx_clicks_link_id ON link_clicks(link_id);
 DROP INDEX IF EXISTS idx_clicks_sub_id; CREATE INDEX idx_clicks_sub_id ON link_clicks(subscriber_id);
-DROP INDEX IF EXISTS idx_clicks_date; CREATE INDEX idx_clicks_date ON link_clicks((TIMEZONE('UTC', created_at)::DATE));
+DROP INDEX IF EXISTS idx_clicks_date; CREATE INDEX idx_clicks_date ON link_clicks(created_at);
 
 -- settings
 DROP TABLE IF EXISTS settings CASCADE;
@@ -244,6 +249,7 @@ INSERT INTO settings (key, value) VALUES
     ('app.notify_emails', '[]'),
     ('app.lang', '"en"'),
     ('privacy.individual_tracking', 'false'),
+    ('privacy.disable_tracking', 'false'),
     ('privacy.unsubscribe_header', 'true'),
     ('privacy.allow_blocklist', 'true'),
     ('privacy.allow_export', 'true'),
@@ -255,6 +261,7 @@ INSERT INTO settings (key, value) VALUES
     ('privacy.record_optin_ip', 'false'),
     ('security.captcha', '{"altcha": {"enabled": false, "complexity": 300000}, "hcaptcha": {"enabled": false, "key": "", "secret": ""}}'),
     ('security.oidc', '{"enabled": false, "provider_url": "", "provider_name": "", "client_id": "", "client_secret": "", "auto_create_users": false, "default_user_role_id": null, "default_list_role_id": null}'),
+    ('security.cors_origins', '[]'),
     ('upload.provider', '"filesystem"'),
     ('upload.max_file_size', '5000'),
     ('upload.extensions', '["jpg","jpeg","png","gif","svg","*"]'),
@@ -271,8 +278,8 @@ INSERT INTO settings (key, value) VALUES
     ('upload.s3.bucket_type', '"public"'),
     ('upload.s3.expiry', '"167h"'),
     ('smtp',
-        '[{"enabled":true, "host":"smtp.yoursite.com","port":25,"auth_protocol":"cram","username":"username","password":"password","hello_hostname":"","max_conns":10,"idle_timeout":"15s","wait_timeout":"5s","max_msg_retries":2,"tls_type":"STARTTLS","tls_skip_verify":false,"email_headers":[]},
-          {"enabled":false, "host":"smtp.gmail.com","port":465,"auth_protocol":"login","username":"username@gmail.com","password":"password","hello_hostname":"","max_conns":10,"idle_timeout":"15s","wait_timeout":"5s","max_msg_retries":2,"tls_type":"TLS","tls_skip_verify":false,"email_headers":[]}]'),
+        '[{"enabled":true, "host":"smtp.yoursite.com","port":25,"auth_protocol":"cram","username":"username","password":"password","hello_hostname":"","max_conns":10,"idle_timeout":"15s","wait_timeout":"5s","max_msg_retries":2,"msg_retry_delay":"10ms","tls_type":"STARTTLS","tls_skip_verify":false,"email_headers":[]},
+          {"enabled":false, "host":"smtp.gmail.com","port":465,"auth_protocol":"login","username":"username@gmail.com","password":"password","hello_hostname":"","max_conns":10,"idle_timeout":"15s","wait_timeout":"5s","max_msg_retries":2,"msg_retry_delay":"10ms","tls_type":"TLS","tls_skip_verify":false,"email_headers":[]}]'),
     ('messengers', '[]'),
     ('bounce.enabled', 'false'),
     ('bounce.webhooks_enabled', 'false'),
@@ -282,12 +289,14 @@ INSERT INTO settings (key, value) VALUES
     ('bounce.sendgrid_key', '""'),
     ('bounce.postmark', '{"enabled": false, "username": "", "password": ""}'),
     ('bounce.forwardemail', '{"enabled": false, "key": ""}'),
+    ('bounce.lettermint', '{"enabled": false, "key": ""}'),
     ('bounce.mailboxes',
         '[{"enabled":false, "type": "pop", "host":"pop.yoursite.com","port":995,"auth_protocol":"userpass","username":"username","password":"password","return_path": "bounce@listmonk.yoursite.com","scan_interval":"15m","tls_enabled":true,"tls_skip_verify":false}]'),
     ('appearance.admin.custom_css', '""'),
     ('appearance.admin.custom_js', '""'),
     ('appearance.public.custom_css', '""'),
-    ('appearance.public.custom_js', '""');
+    ('appearance.public.custom_js', '""'),
+    ('maintenance.db', '{"vacuum": false, "vacuum_cron_interval": "0 2 * * *"}');
 
 -- bounces
 DROP TABLE IF EXISTS bounces CASCADE;
@@ -303,7 +312,7 @@ CREATE TABLE bounces (
 DROP INDEX IF EXISTS idx_bounces_sub_id; CREATE INDEX idx_bounces_sub_id ON bounces(subscriber_id);
 DROP INDEX IF EXISTS idx_bounces_camp_id; CREATE INDEX idx_bounces_camp_id ON bounces(campaign_id);
 DROP INDEX IF EXISTS idx_bounces_source; CREATE INDEX idx_bounces_source ON bounces(source);
-DROP INDEX IF EXISTS idx_bounces_date; CREATE INDEX idx_bounces_date ON bounces((TIMEZONE('UTC', created_at)::DATE));
+DROP INDEX IF EXISTS idx_bounces_date; CREATE INDEX idx_bounces_date ON bounces(created_at);
 
 -- roles
 DROP TABLE IF EXISTS roles CASCADE;
@@ -334,6 +343,8 @@ CREATE TABLE users (
     user_role_id     INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
     list_role_id     INTEGER NULL REFERENCES roles(id) ON DELETE CASCADE,
     status           user_status NOT NULL DEFAULT 'disabled',
+    twofa_type       twofa_type NOT NULL DEFAULT 'none',
+    twofa_key        TEXT NULL,
     loggedin_at      TIMESTAMP WITH TIME ZONE NULL,
     created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -392,13 +403,13 @@ CREATE MATERIALIZED VIEW mat_dashboard_charts AS
         SELECT JSON_AGG(ROW_TO_JSON(row))
         FROM (
             WITH viewDates AS (
-              SELECT TIMEZONE('UTC', created_at)::DATE AS to_date,
-                     TIMEZONE('UTC', created_at)::DATE - INTERVAL '30 DAY' AS from_date
+              SELECT created_at::DATE AS to_date,
+                     created_at::DATE - INTERVAL '30 DAY' AS from_date
                      FROM link_clicks ORDER BY id DESC LIMIT 1
             )
             SELECT COUNT(*) AS count, created_at::DATE as date FROM link_clicks
-              -- use > between < to force the use of the date index.
-              WHERE TIMEZONE('UTC', created_at)::DATE BETWEEN (SELECT from_date FROM viewDates) AND (SELECT to_date FROM viewDates)
+              WHERE created_at >= (SELECT from_date FROM viewDates)
+                AND created_at < (SELECT to_date FROM viewDates) + INTERVAL '1 day'
               GROUP by date ORDER BY date
         ) row
     ),
@@ -406,13 +417,13 @@ CREATE MATERIALIZED VIEW mat_dashboard_charts AS
         SELECT JSON_AGG(ROW_TO_JSON(row))
         FROM (
             WITH viewDates AS (
-              SELECT TIMEZONE('UTC', created_at)::DATE AS to_date,
-                     TIMEZONE('UTC', created_at)::DATE - INTERVAL '30 DAY' AS from_date
+              SELECT created_at::DATE AS to_date,
+                     created_at::DATE - INTERVAL '30 DAY' AS from_date
                      FROM campaign_views ORDER BY id DESC LIMIT 1
             )
             SELECT COUNT(*) AS count, created_at::DATE as date FROM campaign_views
-              -- use > between < to force the use of the date index.
-              WHERE TIMEZONE('UTC', created_at)::DATE BETWEEN (SELECT from_date FROM viewDates) AND (SELECT to_date FROM viewDates)
+              WHERE created_at >= (SELECT from_date FROM viewDates)
+                AND created_at < (SELECT to_date FROM viewDates) + INTERVAL '1 day'
               GROUP by date ORDER BY date
         ) row
     )

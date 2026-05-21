@@ -2,7 +2,9 @@ package mailbox
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -17,11 +19,21 @@ import (
 type POP struct {
 	opt    Opt
 	client *pop3.Client
+	lo     *log.Logger
 }
 
 type bounceHeaders struct {
 	Header string
 	Regexp *regexp.Regexp
+}
+
+type bounceMeta struct {
+	From           string   `json:"from"`
+	Subject        string   `json:"subject"`
+	MessageID      string   `json:"message_id"`
+	DeliveredTo    string   `json:"delivered_to"`
+	Received       []string `json:"received"`
+	ClassifyReason string   `json:"classify_reason"`
 }
 
 var (
@@ -37,10 +49,18 @@ var (
 	}
 
 	reHdrReceived = regexp.MustCompile(`(?m)(?:^` + models.EmailHeaderReceived + `:\s+?)(.*)`)
+
+	// SMTP status code (5.x.x or 4.x.x) to classify hard/soft bounces.
+	reSMTPStatus = regexp.MustCompile(`(?m)(?i)^(?:Status:\s*)?(?:\d{3}\s+)?([45]\.\d+\.\d+)`)
+
+	// List of (conventional) strings to guess hard bounces.
+	reHardBounce = regexp.MustCompile(`(?i)(NXDOMAIN|user unknown|address not found|mailbox not found|address.*reject|does not exist|` +
+		`invalid recipient|no such user|recipient.*invalid|undeliverable|permanent.*failure|permanent.*error|` +
+		`bad.*address|unknown.*user|account.*disabled|address.*disabled)`)
 )
 
 // NewPOP returns a new instance of the POP mailbox client.
-func NewPOP(opt Opt) *POP {
+func NewPOP(opt Opt, lo *log.Logger) *POP {
 	return &POP{
 		opt: opt,
 		client: pop3.New(pop3.Opt{
@@ -49,6 +69,7 @@ func NewPOP(opt Opt) *POP {
 			TLSEnabled:    opt.TLSEnabled,
 			TLSSkipVerify: opt.TLSSkipVerify,
 		}),
+		lo: lo,
 	}
 }
 
@@ -89,13 +110,15 @@ func (p *POP) Scan(limit int, ch chan models.Bounce) error {
 		// Retrieve the raw bytes of the message.
 		b, err := c.RetrRaw(id)
 		if err != nil {
-			return err
+			p.lo.Printf("error retrieving bounce message %d: %v", id, err)
+			continue
 		}
 
 		// Parse the message.
 		m, err := message.Read(b)
 		if err != nil {
-			return err
+			p.lo.Printf("error parsing bounce message %d: %v", id, err)
+			continue
 		}
 
 		h := m
@@ -107,7 +130,8 @@ func (p *POP) Scan(limit int, ch chan models.Bounce) error {
 				if err == io.EOF {
 					break
 				} else if err != nil {
-					return err
+					p.lo.Printf("error reading multipart bounce message %d: %v", id, err)
+					continue
 				}
 				h = part
 			}
@@ -136,7 +160,7 @@ func (p *POP) Scan(limit int, ch chan models.Bounce) error {
 		msgReceived := h.Header.Map()[models.EmailHeaderReceived]
 		if len(msgReceived) == 0 {
 			if u := reHdrReceived.FindAllSubmatch(b.Bytes(), -1); u != nil {
-				for i := 0; i < len(u); i++ {
+				for i := range u {
 					msgReceived = append(msgReceived, string(u[i][1]))
 				}
 			}
@@ -147,24 +171,22 @@ func (p *POP) Scan(limit int, ch chan models.Bounce) error {
 			date = time.Now()
 		}
 
+		// Classify the bounce type based on message content.
+		bounceType, bounceReason := classifyBounce(b.Bytes())
+
 		// Additional bounce e-mail metadata.
-		meta, _ := json.Marshal(struct {
-			From        string   `json:"from"`
-			Subject     string   `json:"subject"`
-			MessageID   string   `json:"message_id"`
-			DeliveredTo string   `json:"delivered_to"`
-			Received    []string `json:"received"`
-		}{
-			From:        hdr[models.EmailHeaderFrom],
-			Subject:     hdr[models.EmailHeaderSubject],
-			MessageID:   hdr[models.EmailHeaderMessageId],
-			DeliveredTo: hdr[models.EmailHeaderDeliveredTo],
-			Received:    msgReceived,
+		meta, _ := json.Marshal(bounceMeta{
+			From:           hdr[models.EmailHeaderFrom],
+			Subject:        hdr[models.EmailHeaderSubject],
+			MessageID:      hdr[models.EmailHeaderMessageId],
+			DeliveredTo:    hdr[models.EmailHeaderDeliveredTo],
+			Received:       msgReceived,
+			ClassifyReason: bounceReason,
 		})
 
 		select {
 		case ch <- models.Bounce{
-			Type:           "hard",
+			Type:           bounceType,
 			CampaignUUID:   hdr[models.EmailHeaderCampaignUUID],
 			SubscriberUUID: hdr[models.EmailHeaderSubscriberUUID],
 			Source:         p.opt.Host,
@@ -183,4 +205,36 @@ func (p *POP) Scan(limit int, ch chan models.Bounce) error {
 	}
 
 	return nil
+}
+
+// classifyBounce analyzes the bounce message content and determines if it's a hard or soft bounce.
+// It checks SMTP status codes, diagnostic headers, and bounce keywords (using string heuristics).
+// soft is the default preference.
+// Returns the bounce type and a classification reason containing context about what matched.
+func classifyBounce(b []byte) (string, string) {
+	if matches := reSMTPStatus.FindAllSubmatch(b, -1); matches != nil {
+		for _, m := range matches {
+			if len(m) >= 2 && len(m[0]) > 1 {
+				// Full status code (e.g., "5.1.1").
+				status := m[1]
+
+				// 5.x.x is hard bounce.
+				if status[0] == '5' {
+					return models.BounceTypeHard, fmt.Sprintf("smtp_status=%s", status)
+				}
+
+				// 4.x.x  is soft bounce.
+				if status[0] == '4' {
+					return models.BounceTypeSoft, fmt.Sprintf("smtp_status=%s", status)
+				}
+			}
+		}
+	}
+
+	// Check for explicit hard bounce keywords.
+	if match := reHardBounce.FindSubmatch(b); match != nil {
+		return models.BounceTypeHard, fmt.Sprintf("body_match=%s", match[1])
+	}
+
+	return models.BounceTypeSoft, "default"
 }

@@ -72,9 +72,10 @@
               <b-table :data="data.lists" hoverable default-sort="createdAt" class="subscriptions">
                 <b-table-column v-slot="props" field="name" :label="$tc('globals.terms.list', 1)">
                   <div>
-                    <router-link :to="`/lists/${props.row.id}`">
+                    <router-link v-if="!props.row.restricted" :to="`/lists/${props.row.id}`">
                       {{ props.row.name }}
                     </router-link>
+                    <span v-else class="has-text-grey-light is-italic">{{ props.row.name }}</span>
                     <br />
                     <b-tag :class="props.row.optin" :data-cy="`optin-${props.row.optin}`">
                       <b-icon :icon="props.row.optin === 'double' ? 'account-check-outline' : 'account-off-outline'"
@@ -137,12 +138,16 @@
                 <pre v-if="visibleMeta[props.row.id]">{{ props.row.meta }}</pre>
               </b-table-column>
             </b-table>
-          </b-tab-item>
+          </b-tab-item><!-- bounces -->
+
+          <b-tab-item :label="$t('subscribers.activity')" class="activity" :disabled="!isEditing">
+            <subscriber-activity v-if="isEditing && data.id" :subscriber-id="data.id" />
+          </b-tab-item><!-- activity -->
         </b-tabs>
 
         <b-field :message="$t('subscribers.attribsHelp') + ' ' + egAttribs" class="mt-6">
           <div>
-            <h5>{{ $t('subscribers.attribs') }}</h5>
+            <h5>{{ $t('globals.terms.attribs') }}</h5>
             <b-input v-model="form.strAttribs" name="attribs" type="textarea" />
             <a href="https://listmonk.app/docs/concepts" target="_blank" rel="noopener noreferrer" class="is-size-7">
               {{ $t('globals.buttons.learnMore') }} <b-icon icon="link-variant" size="is-small" />
@@ -168,11 +173,13 @@ import Vue from 'vue';
 import { mapState } from 'vuex';
 import ListSelector from '../components/ListSelector.vue';
 import CopyText from '../components/CopyText.vue';
+import SubscriberActivity from '../components/SubscriberActivity.vue';
 
 export default Vue.extend({
   components: {
     ListSelector,
     CopyText,
+    SubscriberActivity,
   },
 
   props: {
